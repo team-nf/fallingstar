@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision Processing UI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body class="theme-{{ ui_settings.theme }}">
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo-img">
+                <h1>Vision Processing</h1>
+            </div>
+            <div class="controls">
+                <button id="startBtn" class="btn primary"><i class="material-icons">play_arrow</i> Start</button>
+                <button id="stopBtn" class="btn danger"><i class="material-icons">stop</i> Stop</button>
+                <button id="settingsBtn" class="btn"><i class="material-icons">settings</i> Settings</button>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <main class="main-content">
+            <div class="camera-view-container">
+                <div class="camera-view-header">
+                    <h2>Camera Feed</h2>
+                    <div class="camera-controls">
+                        <button id="snapshotBtn" class="btn small"><i class="material-icons">photo_camera</i></button>
+                        <select id="viewMode" class="select-input">
+                            <option value="processed">Processed</option>
+                            <option value="raw">Raw</option>
+                            <option value="diagnostics">Diagnostics</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="camera-view">
+                    <img id="cameraFeed" src="{{ url_for('video_feed') }}" alt="Camera Feed">
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <div class="panel-section">
+                    <div class="panel-header">
+                        <h3>Detection Info</h3>
+                        <span class="badge" id="detectionCount">0</span>
+                    </div>
+                    <div class="panel-content scrollable" id="detectionInfo">
+                        <div class="info-message">No detections</div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-header">
+                        <h3>Tracking Info</h3>
+                        <span class="badge" id="trackingCount">0</span>
+                    </div>
+                    <div class="panel-content scrollable" id="trackingInfo">
+                        <div class="info-message">No tracked objects</div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-header">
+                        <h3>Target Selection</h3>
+                    </div>
+                    <div class="panel-content" id="targetInfo">
+                        <div class="info-message">No target selected</div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="panel-header">
+                        <h3>System Status</h3>
+                    </div>
+                    <div class="panel-content" id="statusInfo">
+                        <div class="status-item">
+                            <span class="status-label">FPS:</span>
+                            <span class="status-value" id="fpsValue">0</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Processing:</span>
+                            <span class="status-value" id="processingStatus">Stopped</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings modal -->
+        <div id="settingsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button class="close-btn" id="closeSettingsBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="uiSettings">UI</button>
+                        <button class="tab-btn" data-tab="cameraSettings">Camera</button>
+                        <button class="tab-btn" data-tab="detectionSettings">Detection</button>
+                        <button class="tab-btn" data-tab="trackingSettings">Tracking</button>
+                        <button class="tab-btn" data-tab="selectionSettings">Selection</button>
+                    </div>
+
+                    <div class="tab-content" id="uiSettings">
+                        <h3>UI Settings</h3>
+                        <div class="form-group">
+                            <label for="theme">Theme</label>
+                            <select id="theme" class="select-input">
+                                <option value="dark" {% if ui_settings.theme == 'dark' %}selected{% endif %}>Dark Theme</option>
+                                <option value="light" {% if ui_settings.theme == 'light' %}selected{% endif %}>Light Theme</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="showProcessingSteps">Show Processing Steps</label>
+                            <label class="switch">
+                                <input type="checkbox" id="showProcessingSteps" {% if ui_settings.show_processing_steps %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="showDetectionBoxes">Show Detection Boxes</label>
+                            <label class="switch">
+                                <input type="checkbox" id="showDetectionBoxes" {% if ui_settings.show_detection_boxes %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="showTrackingInfo">Show Tracking Info</label>
+                            <label class="switch">
+                                <input type="checkbox" id="showTrackingInfo" {% if ui_settings.show_tracking_info %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="showSelectionInfo">Show Selection Info</label>
+                            <label class="switch">
+                                <input type="checkbox" id="showSelectionInfo" {% if ui_settings.show_selection_info %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="streamResolution">Stream Resolution</label>
+                            <select id="streamResolution" class="select-input">
+                                <option value="original" {% if ui_settings.stream_resolution == 'original' %}selected{% endif %}>Original</option>
+                                <option value="hd" {% if ui_settings.stream_resolution == 'hd' %}selected{% endif %}>HD (1280x720)</option>
+                                <option value="sd" {% if ui_settings.stream_resolution == 'sd' %}selected{% endif %}>SD (640x480)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="tab-content" id="cameraSettings" style="display: none;">
+                        <h3>Camera Settings</h3>
+                        <div id="cameraSettingsForm">
+                            <!-- Dynamically filled by JavaScript -->
+                            <div class="info-message">Loading camera settings...</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-content" id="detectionSettings" style="display: none;">
+                        <h3>Detection Settings</h3>
+                        <div id="detectionSettingsForm">
+                            <!-- Dynamically filled by JavaScript -->
+                            <div class="info-message">Loading detection settings...</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-content" id="trackingSettings" style="display: none;">
+                        <h3>Tracking Settings</h3>
+                        <div id="trackingSettingsForm">
+                            <!-- Dynamically filled by JavaScript -->
+                            <div class="info-message">Loading tracking settings...</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-content" id="selectionSettings" style="display: none;">
+                        <h3>Selection Settings</h3>
+                        <div id="selectionSettingsForm">
+                            <!-- Dynamically filled by JavaScript -->
+                            <div class="info-message">Loading selection settings...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn" id="resetSettingsBtn">Reset</button>
+                    <button class="btn primary" id="saveSettingsBtn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 

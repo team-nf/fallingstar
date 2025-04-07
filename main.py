@@ -44,6 +44,7 @@ except ImportError:
 # Import utilities
 from util.networktables import NetworkTablesInterface, get_default_configuration
 from util.selection import select_target, target_info_to_dict, filter_objects
+from util.pnp_estimation import CircularObjectPnP, process_detections
 
 # Configure logging
 logging.basicConfig(
@@ -89,7 +90,7 @@ DEFAULT_CONFIG = {
         "class_filter": ""     # Comma-separated list of classes to track (empty = all)
     },
     "networktables": {
-        "team_number": 0,      # FRC team number (0 = disabled)
+        "team_number": 9029,   # FRC team number (0 = disabled)
         "server_ip": "",       # NetworkTables server IP (empty = use team number)
         "table_name": "VisionTracking"  # NetworkTables table name
     }
@@ -581,6 +582,16 @@ def main():
     parser.add_argument("--use-cs", action="store_true", help="Use CameraServer instead of OpenCV")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("--no-display", action="store_true", help="Disable display window")
+    parser.add_argument("--algae-diameter", type=float, default=39.0, 
+                       help="Diameter of the algae in centimeters (default: 39.0)")
+    parser.add_argument("--algae-class", type=str, default="algae",
+                       help="Class name for algae objects (default: 'algae')")
+    parser.add_argument("--enable-pnp", action="store_true", 
+                       help="Enable PnP 3D position estimation for circular objects")
+    parser.add_argument("--enable-ui", action="store_true", 
+                       help="Enable web-based UI (enabled by default if ENABLE_UI env var is set)")
+    parser.add_argument("--ui-port", type=int, default=None, 
+                       help="Port for the UI server (defaults to team number)")
     args = parser.parse_args()
     
     # Set logging level
@@ -603,6 +614,9 @@ def main():
         config["processing"]["display"] = False
     if args.use_cs:
         config["camera"]["use_camera_server"] = True
+        
+    # Set team number in environment for UI
+    os.environ['TEAM_NUMBER'] = str(config["networktables"]["team_number"])
     
     # Kamera kalibrasyon verilerini yükle
     camera_calibration = None
@@ -610,6 +624,69 @@ def main():
         calibration_file = config["camera"]["calibration"].get("calibration_file", "")
         if calibration_file:
             camera_calibration = load_camera_calibration(calibration_file)
+    
+    # Initialize PnP estimator if enabled
+    pnp_estimator = None
+    if args.enable_pnp:
+        # Load camera parameters from calibration file
+        if config["camera"]["calibration"].get("use_calibration", False):
+            calibration_file = config["camera"]["calibration"].get("calibration_file", "")
+            try:
+                from util.pnp_estimation import load_camera_params_from_file
+                camera_matrix, dist_coeffs = load_camera_params_from_file(calibration_file)
+                pnp_estimator = CircularObjectPnP(
+                    camera_matrix=camera_matrix,
+                    dist_coeffs=dist_coeffs,
+                    real_diameter_cm=args.algae_diameter,
+                    min_confidence=config["selection"].get("min_confidence", 0.5)
+                )
+                logger.info(f"PnP estimator initialized with calibration from {calibration_file}")
+            except Exception as e:
+                logger.error(f"Failed to initialize PnP estimator with calibration: {e}")
+                pnp_estimator = None
+        
+        # If no calibration or it failed, try to initialize with default parameters
+        if pnp_estimator is None:
+            try:
+                # Get camera resolution
+                frame_width = config["camera"]["width"]
+                frame_height = config["camera"]["height"]
+                
+                # Estimate focal length (rough approximation)
+                focal_length = max(frame_width, frame_height)
+                
+                pnp_estimator = CircularObjectPnP(
+                    focal_length=focal_length,
+                    real_diameter_cm=args.algae_diameter,
+                    min_confidence=config["selection"].get("min_confidence", 0.5)
+                )
+                logger.info("PnP estimator initialized with estimated camera parameters")
+            except Exception as e:
+                logger.error(f"Failed to initialize PnP estimator: {e}")
+                pnp_estimator = None
+    
+    # Determine UI port from team number if not specified
+    ui_port = args.ui_port
+    if ui_port is None:
+        ui_port = config["networktables"]["team_number"]
+        logger.info(f"Using team number {ui_port} as UI port")
+    
+    # Initialize UI server by default or if explicitly enabled
+    enable_ui = args.enable_ui or os.environ.get('ENABLE_UI') == 'true'
+    ui_server_started = False
+    
+    if enable_ui:
+        try:
+            from ui.integration import start_ui_server, update_ui_frame
+            
+            # Start UI server
+            ui_server_started = start_ui_server(host='0.0.0.0', port=ui_port)
+            if ui_server_started:
+                logger.info(f"UI server started at http://localhost:{ui_port}")
+            else:
+                logger.warning("Failed to start UI server")
+        except ImportError:
+            logger.warning("UI module not available, running without UI")
     
     # Setup components
     cap = setup_camera(config)
@@ -675,6 +752,42 @@ def main():
         # Update tracker with new detections
         tracked_objects = tracker.update(detections, frame)
         
+        # Process PnP estimation if enabled
+        pnp_results = []
+        if pnp_estimator is not None:
+            # Convert tracked objects to dictionaries
+            detection_dicts = []
+            for obj in tracked_objects:
+                obj_dict = {
+                    'id': obj.id,
+                    'class_id': obj.class_id,
+                    'class_name': obj.class_name,
+                    'score': obj.score if obj.score is not None else obj.tracking_score,
+                    'bbox': {
+                        'xmin': obj.bbox.xmin,
+                        'ymin': obj.bbox.ymin,
+                        'xmax': obj.bbox.xmax,
+                        'ymax': obj.bbox.ymax
+                    }
+                }
+                detection_dicts.append(obj_dict)
+            
+            # Process detections with PnP estimator
+            pnp_results = process_detections(
+                frame, 
+                detection_dicts, 
+                pnp_estimator,
+                class_filter=args.algae_class
+            )
+            
+            # Log PnP results
+            if pnp_results:
+                for result in pnp_results:
+                    pose = result['pose']
+                    logger.debug(f"Object ID {result['id']} distance: {pose['distance_cm']:.2f}cm, " +
+                               f"angles: H={pose['pose']['angles']['horizontal']:.1f}°, " +
+                               f"V={pose['pose']['angles']['vertical']:.1f}°")
+        
         # Get selection parameters
         selection_params = {
             "frame_width": frame_width,
@@ -690,9 +803,53 @@ def main():
         selection_method = config["selection"].get("algorithm", "lowest")
         selected_target = select_target(tracked_objects, selection_method, selection_params)
         
+        # Update UI if enabled
+        if ui_server_started:
+            # Create processing steps for UI if needed
+            processing_steps = {}
+            
+            if config.get("processing", {}).get("show_processing_steps", False):
+                # Example processing steps to visualize
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                edges = cv2.Canny(gray, 100, 200)
+                
+                # Convert to BGR for display
+                edges_color = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+                
+                processing_steps = {
+                    "Grayscale": gray,
+                    "Edges": edges_color
+                }
+                
+                # Add PnP results if available
+                if pnp_estimator is not None and pnp_results:
+                    # Create a visualization of PnP results
+                    pnp_vis = frame.copy()
+                    for result in pnp_results:
+                        pnp_vis = pnp_estimator.draw_pose(pnp_vis, result['pose'])
+                    
+                    processing_steps["PnP"] = pnp_vis
+            
+            # Update UI
+            try:
+                update_ui_frame(
+                    frame=draw_detections(frame, tracked_objects, selected_target),
+                    detections=detections,
+                    tracked_objects=tracked_objects,
+                    selected_target=selected_target
+                )
+            except Exception as e:
+                logger.error(f"Error updating UI: {e}")
+        
         # Prepare output for display
         if config["processing"].get("display", True):
             output_frame = draw_detections(frame, tracked_objects, selected_target)
+            
+            # Draw PnP results if available
+            if pnp_estimator is not None and pnp_results:
+                for result in pnp_results:
+                    # Draw pose estimation
+                    output_frame = pnp_estimator.draw_pose(output_frame, result['pose'])
             
             # Add processing info
             frame_time = time.time() - loop_start
@@ -743,6 +900,33 @@ def main():
                 tracked_objects_list.append(obj_dict)
             
             nt.publish_tracked_objects(tracked_objects_list)
+            
+            # Publish PnP results if available
+            if pnp_results:
+                # Find best result (closest or selected target)
+                best_result = None
+                
+                if selected_target:
+                    # Try to find PnP result for selected target
+                    for result in pnp_results:
+                        if result['id'] == selected_target.id:
+                            best_result = result
+                            break
+                
+                # If no result for selected target, use closest one
+                if best_result is None and pnp_results:
+                    best_result = min(pnp_results, key=lambda r: r['pose']['distance_cm'])
+                
+                # Publish best result
+                if best_result:
+                    nt.publish_target_info({
+                        "id": best_result['id'],
+                        "class_name": best_result['class_name'],
+                        "distance_cm": best_result['pose']['distance_cm'],
+                        "horizontal_angle": best_result['pose']['pose']['angles']['horizontal'],
+                        "vertical_angle": best_result['pose']['pose']['angles']['vertical'],
+                        "position_3d": best_result['pose']['pose']['translation_vector']
+                    })
         
         # Update frame count
         frame_count += 1

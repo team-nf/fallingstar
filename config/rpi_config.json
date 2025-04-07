@@ -5,10 +5,10 @@
         "height": 480,
         "fps": 30,
         "use_camera_server": true,
-        "name": "Raspberry Pi Camera",
+        "name": "USB Camera",
         "create_output_stream": true,
         "calibration": {
-            "use_calibration": true,
+            "use_calibration": false,
             "calibration_file": "config/camera_calibration.json",
             "undistort_frames": true
         }
@@ -18,11 +18,12 @@
         "display_detections": true,
         "display_tracking": true,
         "display_selection": true,
-        "max_fps": 20
+        "show_processing_steps": true,
+        "max_fps": 30
     },
     "detection": {
         "model_path": "models/model_edgetpu.tflite",
-        "labels_path": "models/labels.txt",
+        "labels_path": "labels.txt",
         "threshold": 0.5,
         "use_coral": true,
         "input_size": [300, 300]
@@ -34,15 +35,15 @@
         "iou_threshold": 0.3
     },
     "selection": {
-        "algorithm": "closest_to_lower_center",
-        "min_confidence": 0.6,
+        "algorithm": "lowest",
+        "min_confidence": 0.5,
         "max_lost_count": 3,
         "min_size": 20,
         "max_size": 1000,
         "class_filter": ""
     },
     "networktables": {
-        "team_number": 1234,
+        "team_number": 9029,
         "server_ip": "",
         "table_name": "VisionTracking"
     }

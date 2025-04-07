@@ -1,8 +1,1 @@
-note
-cube
-cone
-april_tag
-robot
-human_player
-loading_zone
-scoring_zone 
+algae 

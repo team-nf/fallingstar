@@ -1,307 +1,149 @@
-# Vision Processing System
+# FRC 9029 Algae Algılama Sistemi
 
-This vision processing system provides detection, tracking, target selection, and communication capabilities for robotics applications, particularly for FRC (FIRST Robotics Competition).
+Merhaba! Bu repo, FRC 2025 oyunundaki algae'leri tespit etmek için geliştirdiğimiz görüntü işleme sistemini içerir. Docker üzerinde çalışan, hem PC'de geliştirme hem de Raspberry Pi'de yarışma sırasında kullanılabilen kompakt bir sistem kurduk.
 
-## Features
+## Özellikler
 
-- **Object Detection**: TensorFlow Lite based detection with EdgeTPU (Google Coral) support
-- **Object Tracking**: Multiple tracking algorithms (SORT, Kalman, IoU, OpenCV)
-- **Target Selection**: Various algorithms for selecting which target to track
-- **NetworkTables Integration**: Communication with FRC robotics systems
-- **Camera Integration**: Support for both direct OpenCV and FRC CameraServer
-- **Camera Calibration**: Support for lens distortion correction using camera calibration
+- 🎯 Algae algılamak için TensorFlow Lite tabanlı nesne tespiti
+- 🔄 Nesne takibi (Kalman, IoU, SORT ve OpenCV algoritmaları)
+- 📏 PnP algoritması ile 3B konum tespiti (mesafe ve açı hesaplama)
+- 🌐 NetworkTables ile FRC robotu ile haberleşme
+- 🖥️ Modern, şık web arayüzü (PC ve RPI'da çalışır)
+- 🐋 Docker desteği ile kolay kurulum ve deployment
+- 🔄 RoboRIO ile senkronizasyon
 
-## Setup and Installation
+## Başlangıç
 
-### Prerequisites
+Sistemi iki modda çalıştırabilirsin: Test (PC) modu ve Yarışma (Raspberry Pi) modu.
 
-- Python 3.7 or higher
-- OpenCV
-- NumPy
-- TensorFlow Lite
+### Test Modu (PC)
 
-For FRC integration:
-- NetworkTables
-- cscore (CameraServer)
+Geliştirme sırasında veya robotta test etmeden önce PC'de çalıştırmak için:
 
-For EdgeTPU acceleration:
-- PyCoral libraries
-
-### Installation
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/vision-processing.git
-   cd vision-processing
-   ```
-
-2. Install dependencies:
-   ```
-   pip install opencv-python numpy
-   pip install tensorflow tflite-runtime
-   pip install pynetworktables
-   ```
-
-   For FRC CameraServer:
-   ```
-   pip install robotpy[cscore]
-   ```
-
-   For Coral EdgeTPU (optional):
-   ```
-   pip install https://github.com/google-coral/pycoral/releases/download/v2.0.0/pycoral-2.0.0-cp39-cp39-win_amd64.whl
-   ```
-
-3. Place your model and labels:
-   ```
-   mkdir -p models
-   # Copy your model to models/model.tflite
-   # Copy your labels to models/labels.txt
-   ```
-
-## Configuration
-
-Edit the `config/config.json` file to configure the system:
-
-- **Camera settings**: Resolution, FPS, CameraServer options
-- **Camera calibration**: Enable/disable distortion correction
-- **Detection settings**: Model paths, thresholds
-- **Tracking settings**: Algorithm, parameters
-- **Selection settings**: Target selection algorithm
-- **NetworkTables settings**: Team number, server IP
-
-## Running the System
-
-### Basic Usage
-
-```
-python main.py
+```bash
+# Docker imajını oluştur ve çalıştır
+docker-compose -f docker-compose.pc.yml up --build
 ```
 
-### With Command Line Options
+Sonra tarayıcından şu adrese git: http://localhost:9029
 
-```
-python main.py --model path/to/model.tflite --labels path/to/labels.txt
-```
+Bu mod sahte algae tespitleri oluşturur, böylece gerçek bir kamera olmadan bile UI'yı test edebilirsin.
 
-### Using Different Configuration Files
+### Raspberry Pi Modu
 
-The system includes pre-configured settings for PC testing and Raspberry Pi deployment:
+Yarışma sırasında veya robotla çalışırken:
 
-```
-# For PC testing
-python main.py --config config/pc_config.json
-
-# For Raspberry Pi deployment
-python main.py --config config/rpi_config.json
+```bash
+# Docker imajını oluştur ve çalıştır
+docker-compose -f docker-compose.rpi.yml up --build
 ```
 
-### Camera Selection
+Raspberry Pi'nin IP adresinden erişim sağlayabilirsin: http://[rpi-ip]:9029
 
-```
-python main.py --camera 0  # Use camera device 0
-python main.py --video path/to/video.mp4  # Use video file
-```
+Bu mod EdgeTPU'yu kullanır (varsa) ve CameraServer entegrasyonu ile çalışır.
 
-### FRC Integration with CameraServer
+## Sistem Özellikleri (Detaylı)
 
-```
-python main.py --use-cs --team 1234
-```
+### Algae Tespiti
 
-### Raspberry Pi Setup for FRC
+Sistemimiz TensorFlow Lite kullanarak algae'leri tespit eder. Raspberry Pi'de daha iyi performans için Google Coral EdgeTPU desteği ekledik.
 
-For running on a Raspberry Pi as part of an FRC robot system:
-
-1. Install dependencies:
-   ```
-   pip install robotpy[cscore]
-   pip install pynetworktables
-   ```
-
-2. Configure for CameraServer:
-   ```
-   python main.py --use-cs --team YOUR_TEAM_NUMBER
-   ```
-
-3. For automatic startup, create a service file:
-   ```
-   sudo nano /etc/systemd/system/vision.service
-   ```
-   
-   With content:
-   ```
-   [Unit]
-   Description=Vision Processing Service
-   After=network.target
-
-   [Service]
-   ExecStart=/usr/bin/python3 /home/pi/vision-processing/main.py --use-cs --team YOUR_TEAM_NUMBER --no-display
-   WorkingDirectory=/home/pi/vision-processing
-   StandardOutput=inherit
-   StandardError=inherit
-   Restart=always
-   User=pi
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-4. Enable and start the service:
-   ```
-   sudo systemctl enable vision.service
-   sudo systemctl start vision.service
-   ```
-
-## Camera Calibration
-
-Camera calibration helps correct lens distortion, which can improve detection accuracy. The system supports reading calibration data from JSON or OpenCV format files.
-
-### Calibration Format
-
-The calibration file (`calibration/camera_calibration.json`) should contain:
+Tespit ayarlarını `config/pc_config.json` veya `config/rpi_config.json` dosyalarından düzenleyebilirsin:
 
 ```json
-{
-    "camera_matrix": [
-        [fx, 0, cx],
-        [0, fy, cy],
-        [0, 0, 1]
-    ],
-    "dist_coeffs": [k1, k2, p1, p2, k3]
+"detection": {
+    "model_path": "models/model.tflite",
+    "labels_path": "labels.txt",
+    "threshold": 0.5,
+    "use_coral": false,
+    "input_size": [300, 300]
 }
 ```
 
-Where:
-- `fx`, `fy` are focal lengths
-- `cx`, `cy` are principal point coordinates
-- `k1`, `k2`, `k3` are radial distortion coefficients
-- `p1`, `p2` are tangential distortion coefficients
+### Nesne Takibi
 
-### Enabling Calibration
+Sistem, tespit edilen algae'leri kamera görüntüsünde takip eder. Birkaç farklı algoritma arasından seçim yapabilirsin:
 
-To enable camera calibration, modify the `config/config.json` file:
+- **Kalman Filtresi**: Hız tahminli pozisyon takibi (varsayılan)
+- **IoU Tracker**: Basit ve hızlı bounding box eşleştirmesi
+- **SORT**: Daha karmaşık takip algoritması
+- **OpenCV**: OpenCV'nin dahili takip algoritmaları
+
+Takip algoritmasını config dosyasından değiştirebilirsin:
 
 ```json
-"camera": {
-    ...
-    "calibration": {
-        "use_calibration": true,
-        "calibration_file": "calibration/camera_calibration.json",
-        "undistort_frames": true
-    }
+"tracking": {
+    "algorithm": "kalman",
+    "max_age": 30,
+    "min_hits": 3,
+    "iou_threshold": 0.3
 }
 ```
 
-### Generating Calibration File
+### 3B Konum Tespiti (PnP)
 
-You can generate calibration files using OpenCV's calibration tools or the included `calibrate_camera.py` script from the calibration folder.
+PnP (Perspective-n-Point) algoritması, bilinen boyuttaki nesnelerin 3B konumunu hesaplar. Algae'lerin fiziksel çapını bildiğimiz için (39 cm), sistemimiz:
 
-## Modules
+- Kameradan mesafesini (cm)
+- Yatay ve dikey açıları
+- Tam 3B konum verilerini hesaplayabilir
 
-- **main.py**: Main program entry point
-- **detection/**: Object detection implementation
-- **tracking/**: Various tracking algorithms
-- **util/**: Utility functions for NetworkTables and target selection
-- **calibration/**: Camera calibration files and utilities
+Bu özelliği `--enable-pnp` parametresiyle etkinleştirebilirsin, veya UI üzerinden açabilirsin.
 
-## Selecting a Target
+### NetworkTables Entegrasyonu
 
-The system includes multiple algorithms for selecting which target to track:
+Robot koduna veri göndermek için NetworkTables kullanıyoruz. Tespit edilen algae'lerin konumları, mesafeleri ve açıları otomatik olarak gönderilir.
 
-- **lowest**: Select the object lowest in the frame
-- **closest_to_lower_center**: Select the object closest to the bottom-center
-- **slowest**: Select the object with the slowest movement
-- **largest**: Select the largest object
-- **highest_confidence**: Select the object with the highest detection confidence
-- **class_priority**: Select based on object class priorities
-- **center_frame**: Select the object closest to center of frame
+NetworkTables ayarlarını config dosyasından değiştirebilirsin:
 
-## Troubleshooting
-
-### Cannot Find Camera
-
-If the system cannot find your camera, try specifying it directly:
-```
-python main.py --camera 1  # Try different numbers for different cameras
+```json
+"networktables": {
+    "team_number": 9029,
+    "server_ip": "",
+    "table_name": "VisionTracking"
+}
 ```
 
-### CameraServer Issues on Raspberry Pi
+## Web Arayüzü
 
-Make sure you have the appropriate permissions:
-```
-sudo usermod -a -G video $USER
-```
+Sistemimiz kullanıcı dostu bir web arayüzü içerir. Bu arayüz sayesinde:
 
-### EdgeTPU Not Working
+- Kamera görüntüsünü canlı izleyebilirsin
+- Algae tespitlerini ve takip bilgilerini görebilirsin
+- Tüm ayarları grafik arayüzden değiştirebilirsin
+- İşlem adımlarını (gri tonlama, kenar tespiti vb.) görebilirsin
+- Karanlık ve aydınlık tema arasında geçiş yapabilirsin
 
-If you encounter issues with the EdgeTPU:
-```
-python main.py --model models/model.tflite --detection.use_coral=false
-```
+Arayüz, takım numaramız olan 9029 portunda çalışır ve hem PC hem de Raspberry Pi'de kullanılabilir.
 
-### Calibration Issues
+### Arayüz Özellikleri
 
-If you experience issues with camera calibration:
-- Make sure the calibration file exists and contains valid matrices
-- Try setting "undistort_frames" to false to compare results
-- Ensure the calibration was performed at the same resolution you're using
+- **Canlı Video Akışı**: Kamera görüntüsünü gerçek zamanlı izle
+- **Tespit Bilgileri**: Algılanan nesnelerin listesi ve özellikleri
+- **Ayarlar Menüsü**: Tüm sistem ayarlarını düzenle
+- **İşlem Görselleştirmesi**: Görüntü işleme adımlarını ayrı ayrı gör
+- **Tema Seçimi**: Koyu (siyah+yeşil) veya açık (gri+lacivert) tema
 
-## License
+## Kendi Modelini Eğitme
 
-[Your License Information]
+Eğer kendi algae tespit modelini eğitmek istersen:
 
-## Running with Docker
+1. `training/collect_training_data.py` kullanarak veri topla
+2. Verileri etiketle (Roboflow gibi bir araç kullanabilirsin)
+3. TensorFlow Object Detection API ile model eğit
+4. Modeli TFLite formatına dönüştür
+5. EdgeTPU kullanıyorsan, EdgeTPU derleyicisi ile derle
+6. Modeli `models/` klasörüne koyup config dosyasını güncelle
 
-The system includes Docker support for both PC and Raspberry Pi environments.
+## Sorun Giderme
 
-### Prerequisites
+Eğer bir sorunla karşılaşırsan:
 
-- Docker and Docker Compose installed
-- For EdgeTPU support: Connected Coral USB Accelerator
+- Docker loglarını kontrol et
+- UI'dan ayarları gözden geçir
+- NetworkTables bağlantısını kontrol et
+- Kamera erişimini doğrula
 
-### Running with Docker Compose
+---
 
-For PC testing:
-
-```bash
-# Simple way
-docker-compose -f docker-compose.pc.yml up
-
-# Or with the configurable docker-compose.yml
-DOCKERFILE=Dockerfile.pc CONFIG_FILE=config/pc_config.json docker-compose up
-```
-
-For Raspberry Pi deployment:
-
-```bash
-# Simple way
-docker-compose -f docker-compose.rpi.yml up
-
-# Or with the configurable docker-compose.yml
-DOCKERFILE=Dockerfile.rpi CONFIG_FILE=config/rpi_config.json NETWORK_MODE=host \
-EXTRA_ARGS="--use-cs --team 1234" DISPLAY_VOLUME="" docker-compose up
-```
-
-### Building Custom Docker Images
-
-You can customize the Docker images as needed:
-
-```bash
-# For PC
-docker build -t vision-processing-pc -f Dockerfile.pc .
-
-# For Raspberry Pi
-docker build -t vision-processing-rpi -f Dockerfile.rpi .
-```
-
-### Docker Environment Variables
-
-The following environment variables can be used to customize the Docker setup:
-
-- `DOCKERFILE`: Path to the Dockerfile to use (default: `Dockerfile.pc`)
-- `CONFIG_FILE`: Path to the configuration file (default: `config/pc_config.json`)
-- `TEAM_NUMBER`: FRC team number for NetworkTables
-- `NETWORK_MODE`: Network mode for Docker (use `host` for Raspberry Pi)
-- `EXTRA_ARGS`: Additional command-line arguments
-- `DISPLAY_VOLUME`: X11 display socket mount (empty string to disable) 
+FRC Team 9029 tarafından 💚 ile yapıldı. 

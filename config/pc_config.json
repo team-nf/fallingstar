@@ -18,11 +18,12 @@
         "display_detections": true,
         "display_tracking": true,
         "display_selection": true,
+        "show_processing_steps": true,
         "max_fps": 30
     },
     "detection": {
         "model_path": "models/model.tflite",
-        "labels_path": "models/labels.txt",
+        "labels_path": "labels.txt",
         "threshold": 0.5,
         "use_coral": false,
         "input_size": [300, 300]
@@ -42,7 +43,7 @@
         "class_filter": ""
     },
     "networktables": {
-        "team_number": 0,
+        "team_number": 9029,
         "server_ip": "localhost",
         "table_name": "VisionTracking"
     }

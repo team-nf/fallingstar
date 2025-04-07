@@ -4,7 +4,7 @@ services:
   vision-pc:
     build:
       context: .
-      dockerfile: Dockerfile.pc
+      dockerfile: Dockerfile
     container_name: vision-processing-pc
     restart: unless-stopped
     privileged: true  # Needed for camera access
@@ -15,7 +15,12 @@ services:
       - /dev/video0:/dev/video0  # Camera device (adjust as needed)
     environment:
       - DISPLAY=${DISPLAY}  # For GUI display
-    command: python main.py --config config/pc_config.json
+      - CONFIG_PATH=config/pc_config.json
+      - ENABLE_UI=true
+      - TEAM_NUMBER=9029
+    ports:
+      - "9029:9029"  # Expose UI port
+    command: python ui/main.py --config config/pc_config.json --test --port 9029
     networks:
       - vision-network
 

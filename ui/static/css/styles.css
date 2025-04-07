@@ -1,0 +1,561 @@
+/* 
+   Vision Processing UI Styles
+   This stylesheet defines the look and feel of the vision processing interface
+   with both dark and light themes.
+*/
+
+/* ===== Variables ===== */
+:root {
+    /* Dark Theme */
+    --dark-bg-primary: #121212;
+    --dark-bg-secondary: #1e1e1e;
+    --dark-bg-tertiary: #2d2d2d;
+    --dark-text-primary: #f8f8f8;
+    --dark-text-secondary: #a8a8a8;
+    --dark-accent: #00b050;
+    --dark-accent-hover: #00d160;
+    --dark-border: #333;
+    --dark-shadow: rgba(0, 0, 0, 0.5);
+    
+    /* Light Theme */
+    --light-bg-primary: #f2f2f2;
+    --light-bg-secondary: #dfdfdf;
+    --light-bg-tertiary: #d0d0d0;
+    --light-text-primary: #333;
+    --light-text-secondary: #666;
+    --light-accent: #003366;
+    --light-accent-hover: #004488;
+    --light-border: #ccc;
+    --light-shadow: rgba(0, 0, 0, 0.1);
+    
+    /* Common */
+    --danger: #e53935;
+    --warning: #f9a825;
+    --success: #43a047;
+    --info: #1e88e5;
+    
+    /* Dimensions */
+    --header-height: 60px;
+    --panel-width: 300px;
+    --border-radius: 4px;
+}
+
+/* ===== Base Styles ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+}
+
+/* Main app container */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ===== Theme Styles ===== */
+
+/* Dark Theme */
+.theme-dark {
+    background-color: var(--dark-bg-primary);
+    color: var(--dark-text-primary);
+}
+
+.theme-dark .app-header {
+    background-color: var(--dark-bg-secondary);
+    border-bottom: 1px solid var(--dark-border);
+}
+
+.theme-dark .info-panel {
+    background-color: var(--dark-bg-secondary);
+    border-left: 1px solid var(--dark-border);
+}
+
+.theme-dark .panel-section {
+    border-bottom: 1px solid var(--dark-border);
+}
+
+.theme-dark .panel-header {
+    background-color: var(--dark-bg-tertiary);
+}
+
+.theme-dark .badge {
+    background-color: var(--dark-accent);
+}
+
+.theme-dark .btn {
+    background-color: var(--dark-bg-tertiary);
+    color: var(--dark-text-primary);
+}
+
+.theme-dark .btn:hover:not(:disabled) {
+    background-color: #3d3d3d;
+}
+
+.theme-dark .btn.primary {
+    background-color: var(--dark-accent);
+}
+
+.theme-dark .btn.primary:hover:not(:disabled) {
+    background-color: var(--dark-accent-hover);
+}
+
+.theme-dark .btn.danger {
+    background-color: var(--danger);
+}
+
+.theme-dark .modal-content {
+    background-color: var(--dark-bg-secondary);
+}
+
+.theme-dark .modal-header {
+    border-bottom: 1px solid var(--dark-border);
+}
+
+.theme-dark .modal-footer {
+    border-top: 1px solid var(--dark-border);
+}
+
+.theme-dark .tab-btn {
+    background-color: var(--dark-bg-tertiary);
+    color: var(--dark-text-secondary);
+}
+
+.theme-dark .tab-btn.active {
+    background-color: var(--dark-accent);
+    color: var(--dark-text-primary);
+}
+
+.theme-dark .select-input,
+.theme-dark .text-input {
+    background-color: var(--dark-bg-tertiary);
+    color: var(--dark-text-primary);
+    border: 1px solid var(--dark-border);
+}
+
+.theme-dark .info-message {
+    color: var(--dark-text-secondary);
+}
+
+.theme-dark .camera-view {
+    background-color: var(--dark-bg-primary);
+    border: 1px solid var(--dark-border);
+}
+
+.theme-dark .status-label {
+    color: var(--dark-text-secondary);
+}
+
+/* Light Theme */
+.theme-light {
+    background-color: var(--light-bg-primary);
+    color: var(--light-text-primary);
+}
+
+.theme-light .app-header {
+    background-color: var(--light-bg-secondary);
+    border-bottom: 1px solid var(--light-border);
+}
+
+.theme-light .info-panel {
+    background-color: var(--light-bg-secondary);
+    border-left: 1px solid var(--light-border);
+}
+
+.theme-light .panel-section {
+    border-bottom: 1px solid var(--light-border);
+}
+
+.theme-light .panel-header {
+    background-color: var(--light-bg-tertiary);
+}
+
+.theme-light .badge {
+    background-color: var(--light-accent);
+}
+
+.theme-light .btn {
+    background-color: var(--light-bg-tertiary);
+    color: var(--light-text-primary);
+}
+
+.theme-light .btn:hover:not(:disabled) {
+    background-color: #c0c0c0;
+}
+
+.theme-light .btn.primary {
+    background-color: var(--light-accent);
+    color: white;
+}
+
+.theme-light .btn.primary:hover:not(:disabled) {
+    background-color: var(--light-accent-hover);
+}
+
+.theme-light .btn.danger {
+    background-color: var(--danger);
+    color: white;
+}
+
+.theme-light .modal-content {
+    background-color: var(--light-bg-secondary);
+}
+
+.theme-light .modal-header {
+    border-bottom: 1px solid var(--light-border);
+}
+
+.theme-light .modal-footer {
+    border-top: 1px solid var(--light-border);
+}
+
+.theme-light .tab-btn {
+    background-color: var(--light-bg-tertiary);
+    color: var(--light-text-secondary);
+}
+
+.theme-light .tab-btn.active {
+    background-color: var(--light-accent);
+    color: white;
+}
+
+.theme-light .select-input,
+.theme-light .text-input {
+    background-color: white;
+    color: var(--light-text-primary);
+    border: 1px solid var(--light-border);
+}
+
+.theme-light .info-message {
+    color: var(--light-text-secondary);
+}
+
+.theme-light .camera-view {
+    background-color: var(--light-bg-primary);
+    border: 1px solid var(--light-border);
+}
+
+.theme-light .status-label {
+    color: var(--light-text-secondary);
+}
+
+/* ===== Layout Components ===== */
+
+/* Header */
+.app-header {
+    height: var(--header-height);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+}
+
+.logo-img {
+    height: 40px;
+    margin-right: 15px;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+}
+
+/* Main Content */
+.main-content {
+    display: flex;
+    flex: 1;
+    height: calc(100vh - var(--header-height));
+}
+
+/* Camera View */
+.camera-view-container {
+    flex: 1;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.camera-view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.camera-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.camera-view {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.camera-view img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* Info Panel */
+.info-panel {
+    width: var(--panel-width);
+    height: 100%;
+    overflow-y: auto;
+}
+
+.panel-section {
+    padding-bottom: 15px;
+}
+
+.panel-header {
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.panel-content {
+    padding: 15px;
+}
+
+.panel-content.scrollable {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.badge {
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: white;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.status-value {
+    font-weight: bold;
+}
+
+.info-message {
+    text-align: center;
+    padding: 20px 0;
+}
+
+/* ===== UI Components ===== */
+
+/* Buttons */
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn.small {
+    padding: 4px 8px;
+}
+
+.btn i {
+    font-size: 18px;
+}
+
+/* Form Controls */
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.select-input, .text-input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--border-radius);
+    font-family: inherit;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--dark-accent);
+}
+
+.theme-light input:checked + .slider {
+    background-color: var(--light-accent);
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 100;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.visible {
+    display: flex;
+}
+
+.modal-content {
+    width: 600px;
+    max-width: 90%;
+    max-height: 90vh;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-body {
+    padding: 15px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 15px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: inherit;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #333;
+}
+
+.tab-btn {
+    padding: 8px 16px;
+    border: none;
+    cursor: pointer;
+    flex: 1;
+}
+
+.tab-content {
+    padding: 15px 0;
+}
+
+/* ===== Utility Classes ===== */
+.scrollable {
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.scrollable::-webkit-scrollbar {
+    width: 6px;
+}
+
+.scrollable::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollable::-webkit-scrollbar-thumb {
+    background-color: rgba(128, 128, 128, 0.5);
+    border-radius: 3px;
+} 
