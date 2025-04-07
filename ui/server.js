@@ -3,7 +3,6 @@ const path = require('path');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
-const fs = require('fs');
 const axios = require('axios');
 
 // Create Express app
@@ -16,161 +15,139 @@ const io = socketIo(server, {
   }
 });
 
-// Vision API URL
-const VISION_API_URL = process.env.VISION_API_URL || 'http://vision:5000';
+// Vision API URL with a more reliable connection when using host networking
+const VISION_API_URL = process.env.VISION_API_URL || 'http://localhost:5000';
+
+// Configure axios with longer timeouts and retry logic
+const apiClient = axios.create({
+  baseURL: VISION_API_URL,
+  timeout: 5000,  // 5 second timeout
+  maxRetries: 3,
+  retryDelay: 500
+});
+
+// Add retry logic to axios
+apiClient.interceptors.response.use(undefined, async (error) => {
+  const { config } = error;
+  if (!config || !config.maxRetries) return Promise.reject(error);
+  
+  config.retryCount = config.retryCount || 0;
+  if (config.retryCount >= config.maxRetries) {
+    return Promise.reject(error);
+  }
+  
+  config.retryCount += 1;
+  console.log(`Retrying request to ${config.url}, attempt ${config.retryCount}/${config.maxRetries}`);
+  
+  // Wait before retrying
+  await new Promise(resolve => setTimeout(resolve, config.retryDelay || 1000));
+  return apiClient(config);
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Create necessary directories if they don't exist
-const configDir = path.join(__dirname, 'config');
-
-if (!fs.existsSync(configDir)) {
-  fs.mkdirSync(configDir);
-}
-
-// Global settings object
-let globalSettings = {
-  camera: {
-    selectedCamera: '',
-    brightness: 50,
-    contrast: 50,
-    exposure: 50
-  },
-  calibration: {},
-  detection: {},
-  tracking: {},
-  selection: {},
-  pnp: {}
-};
-
-// Save settings
-app.post('/api/settings', (req, res) => {
+// Special handling for MJPEG streams
+app.get('/api/camera/:id/stream/mjpeg', async (req, res) => {
   try {
-    const newSettings = req.body;
-    globalSettings = { ...globalSettings, ...newSettings };
+    console.log(`Piping MJPEG stream from ${VISION_API_URL}/api/camera/${req.params.id}/stream/mjpeg`);
     
-    // Save to file
-    fs.writeFileSync(
-      path.join(configDir, 'settings.json'),
-      JSON.stringify(globalSettings, null, 2)
-    );
+    // Set appropriate headers for MJPEG streaming
+    res.writeHead(200, {
+      'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+      'Cache-Control': 'no-cache',
+      'Connection': 'close',
+      'Pragma': 'no-cache'
+    });
     
-    res.json({ success: true });
+    // Get the raw request from vision API
+    const response = await axios({
+      method: 'GET',
+      url: `${VISION_API_URL}/api/camera/${req.params.id}/stream/mjpeg`,
+      responseType: 'stream',
+      timeout: 30000  // Longer timeout for streams
+    });
+    
+    // Pipe the stream directly to the client
+    response.data.pipe(res);
+    
+    // Handle client disconnect
+    req.on('close', () => {
+      if (response.data) {
+        response.data.destroy();
+      }
+    });
+    
   } catch (error) {
-    console.error('Error saving settings:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get settings
-app.get('/api/settings', (req, res) => {
-  try {
-    if (fs.existsSync(path.join(configDir, 'settings.json'))) {
-      const settings = JSON.parse(
-        fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8')
-      );
-      res.json(settings);
-    } else {
-      res.json(globalSettings);
+    console.error(`Error streaming MJPEG: ${error.message}`);
+    if (!res.headersSent) {
+      res.status(500).send(`Error streaming MJPEG: ${error.message}`);
     }
-  } catch (error) {
-    console.error('Error getting settings:', error);
-    res.status(500).json({ error: error.message });
   }
 });
 
-// Proxy requests to vision API endpoints
-// Get available cameras
-app.get('/api/cameras', async (req, res) => {
-  try {
-    console.log(`Fetching cameras from ${VISION_API_URL}/api/cameras`);
-    const response = await axios.get(`${VISION_API_URL}/api/cameras`);
-    console.log('Camera response:', response.data);
-    res.json(response.data);
-  } catch (error) {
-    console.error('Error getting cameras:', error);
-    res.status(500).json({ error: error.message || 'Failed to get cameras' });
+// Proxy API requests to vision API (except MJPEG streams which are handled separately)
+app.use('/api', async (req, res) => {
+  // Skip MJPEG stream requests as they're handled by a dedicated endpoint
+  if (req.url.includes('/camera/') && req.url.includes('/stream/mjpeg')) {
+    return;
   }
-});
-
-// Get camera stream
-app.get('/api/camera/:id/stream', async (req, res) => {
+  
   try {
-    const response = await axios.get(`${VISION_API_URL}/api/camera/${req.params.id}/stream`);
-    res.json(response.data);
-
-    // Emit to socket clients if we got frame data
-    if (response.data && response.data.frame) {
+    const visionUrl = `${VISION_API_URL}/api${req.url}`;
+    console.log(`Proxying request to: ${visionUrl}`);
+    
+    const method = req.method.toLowerCase();
+    let response;
+    
+    if (method === 'get') {
+      response = await apiClient.get(req.url);
+    } else if (method === 'post') {
+      response = await apiClient.post(req.url, req.body);
+    } else if (method === 'put') {
+      response = await apiClient.put(req.url, req.body);
+    } else if (method === 'delete') {
+      response = await apiClient.delete(req.url);
+    } else {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+    
+    // Forward the response
+    res.status(response.status).json(response.data);
+    
+    // For camera stream - send to socket.io clients
+    if (req.url.includes('/camera/') && req.url.includes('/stream') && response.data && response.data.frame) {
       io.emit('camera_frame', response.data);
     }
+    
+    // For other result types, emit appropriate events
+    if (req.url.includes('/calibrate') && method === 'post') {
+      io.emit('calibration_result', response.data);
+    } else if (req.url.includes('/detect') && method === 'post') {
+      io.emit('detection_result', response.data);
+    } else if (req.url.includes('/pnp') && method === 'post') {
+      io.emit('pnp_result', response.data);
+    }
+    
   } catch (error) {
-    console.error('Error getting camera stream:', error);
-    res.status(500).json({ error: error.message || 'Failed to get camera stream' });
+    console.error(`Error proxying to ${req.url}: ${error.message}`);
+    if (error.response) {
+      // Forward the error status and data from the vision API
+      res.status(error.response.status).json(error.response.data);
+    } else {
+      res.status(500).json({ 
+        error: error.message || 'Internal server error',
+        url: req.url,
+        method: req.method
+      });
+    }
   }
 });
 
-// Calibrate camera
-app.post('/api/camera/:id/calibrate', async (req, res) => {
-  try {
-    const response = await axios.post(
-      `${VISION_API_URL}/api/camera/${req.params.id}/calibrate`,
-      { ...req.body, ...globalSettings.calibration }
-    );
-    res.json(response.data);
-
-    // Emit to socket clients
-    io.emit('calibration_result', response.data);
-  } catch (error) {
-    console.error('Error calibrating camera:', error);
-    res.status(500).json({ error: error.message || 'Failed to calibrate camera' });
-  }
-});
-
-// Detect targets
-app.post('/api/detect', async (req, res) => {
-  try {
-    const response = await axios.post(
-      `${VISION_API_URL}/api/detect`,
-      { ...req.body, ...globalSettings.detection }
-    );
-    res.json(response.data);
-
-    // Emit to socket clients
-    io.emit('detection_result', response.data);
-  } catch (error) {
-    console.error('Error detecting targets:', error);
-    res.status(500).json({ error: error.message || 'Failed to detect targets' });
-  }
-});
-
-// Estimate pose using PnP
-app.post('/api/pnp', async (req, res) => {
-  try {
-    const response = await axios.post(
-      `${VISION_API_URL}/api/pnp`,
-      { ...req.body, ...globalSettings.pnp }
-    );
-    res.json(response.data);
-
-    // Emit to socket clients
-    io.emit('pnp_result', response.data);
-  } catch (error) {
-    console.error('Error estimating pose:', error);
-    res.status(500).json({ error: error.message || 'Failed to estimate pose' });
-  }
-});
-
-// Vision API health check
-app.get('/api/vision-health', async (req, res) => {
-  try {
-    const response = await axios.get(`${VISION_API_URL}/api/health`);
-    res.json(response.data);
-  } catch (error) {
-    console.error('Error checking vision API health:', error);
-    res.status(500).json({ error: error.message || 'Vision API unavailable' });
-  }
+// Add a health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
 });
 
 // Socket.io
@@ -182,11 +159,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// This app is an API server, not serving React static files
-// The React app is served by the dev server on a different port
-
 // Start server
 const PORT = process.env.PORT || 9029;
 server.listen(PORT, () => {
   console.log(`API Server running on port ${PORT}`);
+  console.log(`Using vision API at: ${VISION_API_URL}`);
 }); 

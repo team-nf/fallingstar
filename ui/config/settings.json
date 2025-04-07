@@ -1,0 +1,42 @@
+{
+  "camera": {
+    "selectedCamera": 0,
+    "brightness": 50,
+    "contrast": 50,
+    "exposure": 50,
+    "resolution": {
+      "width": 640,
+      "height": 480
+    }
+  },
+  "calibration": {
+    "chessboardSize": {
+      "width": 9,
+      "height": 6
+    },
+    "squareSize": 25
+  },
+  "detection": {
+    "selectedModel": "",
+    "confidenceThreshold": 0.5
+  },
+  "tracking": {
+    "selectedAlgorithm": "",
+    "trailDuration": 3
+  },
+  "selection": {
+    "selectedAlgorithm": ""
+  },
+  "pnp": {
+    "selectedTarget": "",
+    "customDimensions": {
+      "width": 0.2,
+      "height": 0.2,
+      "depth": 0.2
+    },
+    "fieldPosition": {
+      "x": 0,
+      "y": 0
+    }
+  }
+}

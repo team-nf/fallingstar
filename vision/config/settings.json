@@ -1,0 +1,23 @@
+{
+  "camera": {
+    "brightness": 50,
+    "contrast": 50,
+    "exposure": 50,
+    "resolution": {
+      "height": 480,
+      "width": 640
+    },
+    "selectedCamera": 0
+  },
+  "calibration": {
+    "chessboardSize": {
+      "height": 6,
+      "width": 9
+    },
+    "squareSize": 25
+  },
+  "detection": {},
+  "tracking": {},
+  "selection": {},
+  "pnp": {}
+}

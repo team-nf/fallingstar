@@ -33,17 +33,48 @@ const defaultSettings = {
 const SettingsContext = createContext();
 
 export const SettingsProvider = ({ children }) => {
-  // Try to load settings from localStorage, or use defaults
-  const [settings, setSettings] = useState(() => {
-    const savedSettings = localStorage.getItem('fallingstarSettings');
-    return savedSettings ? JSON.parse(savedSettings) : defaultSettings;
-  });
+  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState(defaultSettings);
 
-  // Save settings to localStorage whenever they change
+  // Load settings from vision API on component mount
   useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        // Try to load from vision API first
+        const response = await fetch('http://localhost:9029/api/settings');
+        if (response.ok) {
+          const data = await response.json();
+          setSettings(data);
+        } else {
+          // If API fails, try localStorage
+          const savedSettings = localStorage.getItem('fallingstarSettings');
+          if (savedSettings) {
+            setSettings(JSON.parse(savedSettings));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        // If all fails, use defaults and try localStorage
+        const savedSettings = localStorage.getItem('fallingstarSettings');
+        if (savedSettings) {
+          setSettings(JSON.parse(savedSettings));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, []);
+
+  // Save settings whenever they change
+  useEffect(() => {
+    if (loading) return; // Skip initial load
+    
+    // Save to localStorage as a backup
     localStorage.setItem('fallingstarSettings', JSON.stringify(settings));
     
-    // Also send settings to the server for Python integration
+    // Save to vision API
     fetch('http://localhost:9029/api/settings', {
       method: 'POST',
       headers: {
@@ -51,9 +82,9 @@ export const SettingsProvider = ({ children }) => {
       },
       body: JSON.stringify(settings),
     }).catch(error => {
-      console.error('Error saving settings to server:', error);
+      console.error('Error saving settings to vision API:', error);
     });
-  }, [settings]);
+  }, [settings, loading]);
 
   // Update specific settings section
   const updateSettings = (section, updates) => {
@@ -70,6 +101,11 @@ export const SettingsProvider = ({ children }) => {
   const resetSettings = () => {
     setSettings(defaultSettings);
   };
+
+  if (loading) {
+    // You could return a loading indicator here if needed
+    return null;
+  }
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings, resetSettings }}>

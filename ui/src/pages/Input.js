@@ -37,6 +37,12 @@ const Input = () => {
     exposure = 50
   } = settings.camera || {};
 
+  // State for streaming
+  const [streamUrl, setStreamUrl] = useState('');
+  const [frameSrc, setFrameSrc] = useState('');
+  const [useFrameFallback, setUseFrameFallback] = useState(false);
+  const [streamError, setStreamError] = useState(false);
+  
   // Fetch camera list from API
   const fetchCameras = async () => {
     setLoading(true);
@@ -53,8 +59,8 @@ const Input = () => {
       setError(error.message || 'Failed to fetch camera list');
       // Fallback to mock data in case of error
       setCameras([
-        { id: 'camera0', name: 'USB Camera', resolution: '640x480' },
-        { id: 'camera1', name: 'Built-in Camera', resolution: '1280x720' }
+        { id: 0, name: 'USB Camera', resolution: '640x480' },
+        { id: 1, name: 'Built-in Camera', resolution: '1280x720' }
       ]);
     } finally {
       setLoading(false);
@@ -66,6 +72,67 @@ const Input = () => {
     fetchCameras();
     document.title = 'Input - FallingStar';
   }, []);
+
+  // Update stream URL when camera selection changes
+  useEffect(() => {
+    if (selectedCamera !== '') {
+      setStreamUrl(`http://localhost:9029/api/camera/${selectedCamera}/stream/mjpeg`);
+      // Also set up fallback frame fetching
+      setUseFrameFallback(false);
+      setStreamError(false);
+    } else {
+      setStreamUrl('');
+      setFrameSrc('');
+    }
+  }, [selectedCamera]);
+
+  // Fallback method to get frames one by one
+  const fetchFrame = async () => {
+    if (!selectedCamera || !useFrameFallback) return;
+    
+    try {
+      const response = await fetch(`http://localhost:9029/api/camera/${selectedCamera}/stream`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch frame: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      if (data.frame) {
+        setFrameSrc(`data:image/jpeg;base64,${data.frame}`);
+      }
+      
+      // Schedule next frame fetch if still using fallback
+      if (useFrameFallback) {
+        setTimeout(fetchFrame, 100); // ~10fps
+      }
+    } catch (error) {
+      console.error('Error fetching frame:', error);
+      if (useFrameFallback) {
+        setTimeout(fetchFrame, 1000); // Retry with longer delay on error
+      }
+    }
+  };
+
+  // Start fallback method if needed
+  useEffect(() => {
+    if (useFrameFallback) {
+      fetchFrame();
+    }
+  }, [useFrameFallback, selectedCamera]);
+
+  // Handle MJPEG stream error
+  const handleStreamError = () => {
+    console.log('MJPEG stream error, switching to fallback method');
+    setStreamError(true);
+    setUseFrameFallback(true);
+  };
+
+  // Handle stream load
+  const handleStreamLoad = () => {
+    console.log('MJPEG stream loaded successfully');
+    setStreamError(false);
+    setUseFrameFallback(false);
+  };
 
   // Handle camera selection
   const handleCameraChange = (event) => {
@@ -239,26 +306,49 @@ const Input = () => {
                     overflow: 'hidden'
                   }}
                 >
-                  {/* Placeholder for actual video stream - in a real app we would connect to a WebRTC or WebSocket stream */}
-                  <Paper 
-                    elevation={0} 
-                    sx={{ 
-                      bgcolor: 'background.paper', 
-                      p: 2, 
-                      textAlign: 'center',
-                      borderRadius: 2
-                    }}
-                  >
-                    <Typography variant="h6">
-                      Camera Preview
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Streaming from {cameras.find(cam => cam.id === selectedCamera)?.name || 'unknown camera'}
-                    </Typography>
-                    <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                      Brightness: {brightness}% | Contrast: {contrast}% | Exposure: {exposure}%
-                    </Typography>
-                  </Paper>
+                  {streamUrl && !streamError ? (
+                    <img 
+                      src={streamUrl}
+                      alt="Camera Stream"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain'
+                      }}
+                      onError={handleStreamError}
+                      onLoad={handleStreamLoad}
+                    />
+                  ) : frameSrc ? (
+                    <img 
+                      src={frameSrc}
+                      alt="Camera Frame"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain'
+                      }}
+                    />
+                  ) : (
+                    <Paper 
+                      elevation={0} 
+                      sx={{ 
+                        bgcolor: 'background.paper', 
+                        p: 2, 
+                        textAlign: 'center',
+                        borderRadius: 2
+                      }}
+                    >
+                      <Typography variant="h6">
+                        Camera Preview
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Streaming from {cameras.find(cam => cam.id === selectedCamera)?.name || 'unknown camera'}
+                      </Typography>
+                      <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                        Brightness: {brightness}% | Contrast: {contrast}% | Exposure: {exposure}%
+                      </Typography>
+                    </Paper>
+                  )}
                 </Box>
               ) : (
                 <Typography variant="body1" color="textSecondary">

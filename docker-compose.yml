@@ -13,22 +13,30 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - VISION_API_URL=http://vision:5000
+      - VISION_API_URL=http://localhost:5000
     restart: unless-stopped
     depends_on:
       - vision
-  
+    network_mode: "host"  # Use host network to ensure direct connectivity
+
   vision:
     build:
       context: ./vision
       dockerfile: Dockerfile
     volumes:
       - ./vision/src:/app/src
+      - ./vision/config:/app/config
+      - /dev:/dev  # Add direct access to the host's /dev directory
     ports:
       - "5000:5000"
+    # Map all available video devices with broad permissions
     devices:
-      - "/dev/video0:/dev/video0"
-      - "/dev/video1:/dev/video1"
+      - /dev/video0:/dev/video0
+    # Let container access host hardware broadly
+    privileged: true
+    # Use host's network for best device access
+    network_mode: "host"
     environment:
       - PYTHONUNBUFFERED=1
+      - DISPLAY=${DISPLAY}
     restart: unless-stopped 
