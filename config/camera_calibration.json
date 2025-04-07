@@ -1,0 +1,27 @@
+{
+    "camera_name": "Default Camera",
+    "calibration_date": "2023-04-06",
+    "resolution": {
+        "width": 640,
+        "height": 480
+    },
+    "camera_matrix": [
+        [500.0, 0.0, 320.0],
+        [0.0, 500.0, 240.0],
+        [0.0, 0.0, 1.0]
+    ],
+    "dist_coeffs": [
+        0.1,
+        -0.1,
+        0.0,
+        0.0,
+        0.05
+    ],
+    "reprojection_error": 0.25,
+    "calibration_settings": {
+        "chessboard_size": [9, 6],
+        "square_size": 25.0,
+        "num_samples": 25
+    },
+    "notes": "Bu bir örnek kalibrasyon dosyasıdır. Gerçek kalibrasyon değerlerini buraya kaydedin."
+} 

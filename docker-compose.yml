@@ -1,0 +1,28 @@
+version: '3'
+
+services:
+  vision-processing:
+    build:
+      context: .
+      dockerfile: ${DOCKERFILE:-Dockerfile.pc}
+    container_name: vision-processing
+    restart: unless-stopped
+    privileged: true  # Needed for camera and EdgeTPU access
+    volumes:
+      - ./:/app  # Mount the entire project directory
+      - ${DISPLAY_VOLUME:-/tmp/.X11-unix:/tmp/.X11-unix}  # For GUI display if needed (PC only)
+    devices:
+      - /dev/video0:/dev/video0  # Camera device (adjust as needed)
+      - ${EDGETPU_DEVICE:-/dev/bus/usb:/dev/bus/usb}  # For Coral EdgeTPU (RPi only)
+    environment:
+      - DISPLAY=${DISPLAY}  # For GUI display (PC only)
+      - TEAM_NUMBER=${TEAM_NUMBER:-0}  # FRC team number
+    command: python main.py --config ${CONFIG_FILE:-config/pc_config.json} ${EXTRA_ARGS}
+    network_mode: ${NETWORK_MODE:-bridge}  # Use host for RPi, bridge for PC
+
+# Usage:
+# For PC:
+#   DOCKERFILE=Dockerfile.pc CONFIG_FILE=config/pc_config.json docker-compose up
+#
+# For RPi:
+#   DOCKERFILE=Dockerfile.rpi CONFIG_FILE=config/rpi_config.json NETWORK_MODE=host EXTRA_ARGS="--use-cs --team 1234" DISPLAY_VOLUME="" docker-compose up 

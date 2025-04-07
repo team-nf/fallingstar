@@ -1,0 +1,49 @@
+{
+    "camera": {
+        "device": 0,
+        "width": 640,
+        "height": 480,
+        "fps": 30,
+        "use_camera_server": true,
+        "name": "Raspberry Pi Camera",
+        "create_output_stream": true,
+        "calibration": {
+            "use_calibration": true,
+            "calibration_file": "config/camera_calibration.json",
+            "undistort_frames": true
+        }
+    },
+    "processing": {
+        "display": false,
+        "display_detections": true,
+        "display_tracking": true,
+        "display_selection": true,
+        "max_fps": 20
+    },
+    "detection": {
+        "model_path": "models/model_edgetpu.tflite",
+        "labels_path": "models/labels.txt",
+        "threshold": 0.5,
+        "use_coral": true,
+        "input_size": [300, 300]
+    },
+    "tracking": {
+        "algorithm": "kalman",
+        "max_age": 30,
+        "min_hits": 3,
+        "iou_threshold": 0.3
+    },
+    "selection": {
+        "algorithm": "closest_to_lower_center",
+        "min_confidence": 0.6,
+        "max_lost_count": 3,
+        "min_size": 20,
+        "max_size": 1000,
+        "class_filter": ""
+    },
+    "networktables": {
+        "team_number": 1234,
+        "server_ip": "",
+        "table_name": "VisionTracking"
+    }
+} 

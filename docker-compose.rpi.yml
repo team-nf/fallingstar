@@ -1,0 +1,26 @@
+version: '3'
+
+services:
+  vision-rpi:
+    build:
+      context: .
+      dockerfile: Dockerfile.rpi
+    container_name: vision-processing-rpi
+    restart: unless-stopped
+    privileged: true  # Needed for camera and EdgeTPU access
+    volumes:
+      - ./:/app  # Mount the entire project directory
+    devices:
+      - /dev/video0:/dev/video0  # Camera device (adjust as needed)
+      - /dev/bus/usb:/dev/bus/usb  # For Coral EdgeTPU
+    environment:
+      - TEAM_NUMBER=1234  # Change to your FRC team number
+    command: python main.py --config config/rpi_config.json --team ${TEAM_NUMBER}
+    network_mode: "host"  # Use host networking for NetworkTables
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all  # Only needed if you have a GPU accelerator 

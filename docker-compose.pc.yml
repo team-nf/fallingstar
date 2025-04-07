@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  vision-pc:
+    build:
+      context: .
+      dockerfile: Dockerfile.pc
+    container_name: vision-processing-pc
+    restart: unless-stopped
+    privileged: true  # Needed for camera access
+    volumes:
+      - ./:/app  # Mount the entire project directory
+      - /tmp/.X11-unix:/tmp/.X11-unix  # For GUI display if needed
+    devices:
+      - /dev/video0:/dev/video0  # Camera device (adjust as needed)
+    environment:
+      - DISPLAY=${DISPLAY}  # For GUI display
+    command: python main.py --config config/pc_config.json
+    networks:
+      - vision-network
+
+networks:
+  vision-network:
+    driver: bridge 
