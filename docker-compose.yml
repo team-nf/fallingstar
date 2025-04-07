@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    ports:
+      - "9029:9029"  # API server
+      - "3000:3000"  # React dev server
+    volumes:
+      - ./ui:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VISION_API_URL=http://vision:5000
+    restart: unless-stopped
+    depends_on:
+      - vision
+  
+  vision:
+    build:
+      context: ./vision
+      dockerfile: Dockerfile
+    volumes:
+      - ./vision/src:/app/src
+    ports:
+      - "5000:5000"
+    devices:
+      - "/dev/video0:/dev/video0"
+      - "/dev/video1:/dev/video1"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped 

@@ -1,149 +1,75 @@
-# FRC 9029 Algae Algılama Sistemi
+# FallingStar
 
-Merhaba! Bu repo, FRC 2025 oyunundaki algae'leri tespit etmek için geliştirdiğimiz görüntü işleme sistemini içerir. Docker üzerinde çalışan, hem PC'de geliştirme hem de Raspberry Pi'de yarışma sırasında kullanılabilen kompakt bir sistem kurduk.
+An open-source computer vision solution for FRC robotics teams, inspired by Limelight.
 
-## Özellikler
+## Project Structure
 
-- 🎯 Algae algılamak için TensorFlow Lite tabanlı nesne tespiti
-- 🔄 Nesne takibi (Kalman, IoU, SORT ve OpenCV algoritmaları)
-- 📏 PnP algoritması ile 3B konum tespiti (mesafe ve açı hesaplama)
-- 🌐 NetworkTables ile FRC robotu ile haberleşme
-- 🖥️ Modern, şık web arayüzü (PC ve RPI'da çalışır)
-- 🐋 Docker desteği ile kolay kurulum ve deployment
-- 🔄 RoboRIO ile senkronizasyon
+FallingStar is divided into two main components:
 
-## Başlangıç
+1. **UI** - A React-based user interface for configuring and monitoring the vision system
+2. **Vision** - A Python-based computer vision backend that processes camera feeds and detects targets
 
-Sistemi iki modda çalıştırabilirsin: Test (PC) modu ve Yarışma (Raspberry Pi) modu.
+These components communicate via a REST API, allowing them to run on separate devices if needed.
 
-### Test Modu (PC)
+## Features
 
-Geliştirme sırasında veya robotta test etmeden önce PC'de çalıştırmak için:
+- Multi-camera support 
+- Camera calibration tools
+- Configurable target detection (AprilTags, color-based, custom contours)
+- Target selection and filtering
+- 3D pose estimation (PNP solver)
+- FRC NetworkTables integration
+- Save/load configurations
+- Themeable UI
 
-```bash
-# Docker imajını oluştur ve çalıştır
-docker-compose -f docker-compose.pc.yml up --build
-```
+## Requirements
 
-Sonra tarayıcından şu adrese git: http://localhost:9029
+- Docker and Docker Compose
+- Web browser (Chrome/Firefox recommended)
+- USB cameras (or other compatible camera devices)
 
-Bu mod sahte algae tespitleri oluşturur, böylece gerçek bir kamera olmadan bile UI'yı test edebilirsin.
+## Setup
 
-### Raspberry Pi Modu
+1. Clone this repository
+2. Run `docker-compose up --build`
+3. Access the UI at `http://localhost:9029`
 
-Yarışma sırasında veya robotla çalışırken:
+## Development
 
-```bash
-# Docker imajını oluştur ve çalıştır
-docker-compose -f docker-compose.rpi.yml up --build
-```
+### UI Component
 
-Raspberry Pi'nin IP adresinden erişim sağlayabilirsin: http://[rpi-ip]:9029
+The UI is built with:
+- React 
+- Material-UI for components
+- Socket.IO for real-time updates
+- Express backend for API routing
 
-Bu mod EdgeTPU'yu kullanır (varsa) ve CameraServer entegrasyonu ile çalışır.
+UI code is located in the `ui/` directory.
 
-## Sistem Özellikleri (Detaylı)
+### Vision Component
 
-### Algae Tespiti
+The vision processing is built with:
+- Python 3.10+
+- OpenCV for computer vision algorithms
+- Flask for REST API
+- NumPy for numerical computation
 
-Sistemimiz TensorFlow Lite kullanarak algae'leri tespit eder. Raspberry Pi'de daha iyi performans için Google Coral EdgeTPU desteği ekledik.
+Vision code is located in the `vision/` directory.
 
-Tespit ayarlarını `config/pc_config.json` veya `config/rpi_config.json` dosyalarından düzenleyebilirsin:
+## API Reference
 
-```json
-"detection": {
-    "model_path": "models/model.tflite",
-    "labels_path": "labels.txt",
-    "threshold": 0.5,
-    "use_coral": false,
-    "input_size": [300, 300]
-}
-```
+The vision component exposes these API endpoints:
 
-### Nesne Takibi
+- `GET /api/cameras` - List all available cameras
+- `GET /api/camera/:id/stream` - Get a single frame from the camera
+- `POST /api/camera/:id/calibrate` - Calibrate a specific camera
+- `POST /api/detect` - Detect targets in camera feed
+- `POST /api/pnp` - Perform 3D pose estimation
 
-Sistem, tespit edilen algae'leri kamera görüntüsünde takip eder. Birkaç farklı algoritma arasından seçim yapabilirsin:
+## Contributing
 
-- **Kalman Filtresi**: Hız tahminli pozisyon takibi (varsayılan)
-- **IoU Tracker**: Basit ve hızlı bounding box eşleştirmesi
-- **SORT**: Daha karmaşık takip algoritması
-- **OpenCV**: OpenCV'nin dahili takip algoritmaları
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-Takip algoritmasını config dosyasından değiştirebilirsin:
+## License
 
-```json
-"tracking": {
-    "algorithm": "kalman",
-    "max_age": 30,
-    "min_hits": 3,
-    "iou_threshold": 0.3
-}
-```
-
-### 3B Konum Tespiti (PnP)
-
-PnP (Perspective-n-Point) algoritması, bilinen boyuttaki nesnelerin 3B konumunu hesaplar. Algae'lerin fiziksel çapını bildiğimiz için (39 cm), sistemimiz:
-
-- Kameradan mesafesini (cm)
-- Yatay ve dikey açıları
-- Tam 3B konum verilerini hesaplayabilir
-
-Bu özelliği `--enable-pnp` parametresiyle etkinleştirebilirsin, veya UI üzerinden açabilirsin.
-
-### NetworkTables Entegrasyonu
-
-Robot koduna veri göndermek için NetworkTables kullanıyoruz. Tespit edilen algae'lerin konumları, mesafeleri ve açıları otomatik olarak gönderilir.
-
-NetworkTables ayarlarını config dosyasından değiştirebilirsin:
-
-```json
-"networktables": {
-    "team_number": 9029,
-    "server_ip": "",
-    "table_name": "VisionTracking"
-}
-```
-
-## Web Arayüzü
-
-Sistemimiz kullanıcı dostu bir web arayüzü içerir. Bu arayüz sayesinde:
-
-- Kamera görüntüsünü canlı izleyebilirsin
-- Algae tespitlerini ve takip bilgilerini görebilirsin
-- Tüm ayarları grafik arayüzden değiştirebilirsin
-- İşlem adımlarını (gri tonlama, kenar tespiti vb.) görebilirsin
-- Karanlık ve aydınlık tema arasında geçiş yapabilirsin
-
-Arayüz, takım numaramız olan 9029 portunda çalışır ve hem PC hem de Raspberry Pi'de kullanılabilir.
-
-### Arayüz Özellikleri
-
-- **Canlı Video Akışı**: Kamera görüntüsünü gerçek zamanlı izle
-- **Tespit Bilgileri**: Algılanan nesnelerin listesi ve özellikleri
-- **Ayarlar Menüsü**: Tüm sistem ayarlarını düzenle
-- **İşlem Görselleştirmesi**: Görüntü işleme adımlarını ayrı ayrı gör
-- **Tema Seçimi**: Koyu (siyah+yeşil) veya açık (gri+lacivert) tema
-
-## Kendi Modelini Eğitme
-
-Eğer kendi algae tespit modelini eğitmek istersen:
-
-1. `training/collect_training_data.py` kullanarak veri topla
-2. Verileri etiketle (Roboflow gibi bir araç kullanabilirsin)
-3. TensorFlow Object Detection API ile model eğit
-4. Modeli TFLite formatına dönüştür
-5. EdgeTPU kullanıyorsan, EdgeTPU derleyicisi ile derle
-6. Modeli `models/` klasörüne koyup config dosyasını güncelle
-
-## Sorun Giderme
-
-Eğer bir sorunla karşılaşırsan:
-
-- Docker loglarını kontrol et
-- UI'dan ayarları gözden geçir
-- NetworkTables bağlantısını kontrol et
-- Kamera erişimini doğrula
-
----
-
-FRC Team 9029 tarafından 💚 ile yapıldı. 
+This project is licensed under the MIT License - see the LICENSE file for details. 

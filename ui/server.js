@@ -1,93 +1,192 @@
 const express = require('express');
-const http = require('http');
 const path = require('path');
-const { Server } = require('socket.io');
-const { spawn } = require('child_process');
 const cors = require('cors');
+const http = require('http');
+const socketIo = require('socket.io');
+const fs = require('fs');
+const axios = require('axios');
 
 // Create Express app
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
+const io = socketIo(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: '*',
+    methods: ['GET', 'POST']
   }
 });
+
+// Vision API URL
+const VISION_API_URL = process.env.VISION_API_URL || 'http://vision:5000';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// In production, serve the React app
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'build')));
-  
-  app.get('/*', function (req, res) {
-    res.sendFile(path.join(__dirname, 'build', 'index.html'));
-  });
+// Create necessary directories if they don't exist
+const configDir = path.join(__dirname, 'config');
+
+if (!fs.existsSync(configDir)) {
+  fs.mkdirSync(configDir);
 }
 
-// API endpoints
-app.get('/api/config', (req, res) => {
-  // Return the current configuration
-  res.json({
-    teamNumber: process.env.TEAM_NUMBER || '9029',
-    enableUI: process.env.ENABLE_UI === 'true',
-    configPath: process.env.CONFIG_PATH || 'config/pc_config.json'
-  });
+// Global settings object
+let globalSettings = {
+  camera: {
+    selectedCamera: '',
+    brightness: 50,
+    contrast: 50,
+    exposure: 50
+  },
+  calibration: {},
+  detection: {},
+  tracking: {},
+  selection: {},
+  pnp: {}
+};
+
+// Save settings
+app.post('/api/settings', (req, res) => {
+  try {
+    const newSettings = req.body;
+    globalSettings = { ...globalSettings, ...newSettings };
+    
+    // Save to file
+    fs.writeFileSync(
+      path.join(configDir, 'settings.json'),
+      JSON.stringify(globalSettings, null, 2)
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/api/config', (req, res) => {
-  // Update configuration
-  // This is a placeholder - actual implementation would update the config file
-  console.log('Received config update:', req.body);
-  res.json({ success: true });
-});
-
-// Camera stream endpoint
-app.get('/api/stream', (req, res) => {
-  // This is a placeholder - in a real implementation, you would
-  // configure a proper video streaming endpoint using something like
-  // MJPEG, WebRTC, or a websocket-based solution
-  res.redirect('/static/images/stream_placeholder.jpg');
-});
-
-// Generate some random data for demo purposes
-function generateRandomData() {
-  return {
-    fps: Math.floor(Math.random() * 10) + 25,
-    targets: Math.floor(Math.random() * 3),
-    latency: Math.floor(Math.random() * 20) + 10,
-    position: {
-      x: parseFloat((Math.random() * 10 - 5).toFixed(2)),
-      y: parseFloat((Math.random() * 10 - 5).toFixed(2)),
-      z: parseFloat((Math.random() * 10).toFixed(2))
+// Get settings
+app.get('/api/settings', (req, res) => {
+  try {
+    if (fs.existsSync(path.join(configDir, 'settings.json'))) {
+      const settings = JSON.parse(
+        fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8')
+      );
+      res.json(settings);
+    } else {
+      res.json(globalSettings);
     }
-  };
-}
+  } catch (error) {
+    console.error('Error getting settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// Socket.IO connection
+// Proxy requests to vision API endpoints
+// Get available cameras
+app.get('/api/cameras', async (req, res) => {
+  try {
+    console.log(`Fetching cameras from ${VISION_API_URL}/api/cameras`);
+    const response = await axios.get(`${VISION_API_URL}/api/cameras`);
+    console.log('Camera response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error getting cameras:', error);
+    res.status(500).json({ error: error.message || 'Failed to get cameras' });
+  }
+});
+
+// Get camera stream
+app.get('/api/camera/:id/stream', async (req, res) => {
+  try {
+    const response = await axios.get(`${VISION_API_URL}/api/camera/${req.params.id}/stream`);
+    res.json(response.data);
+
+    // Emit to socket clients if we got frame data
+    if (response.data && response.data.frame) {
+      io.emit('camera_frame', response.data);
+    }
+  } catch (error) {
+    console.error('Error getting camera stream:', error);
+    res.status(500).json({ error: error.message || 'Failed to get camera stream' });
+  }
+});
+
+// Calibrate camera
+app.post('/api/camera/:id/calibrate', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${VISION_API_URL}/api/camera/${req.params.id}/calibrate`,
+      { ...req.body, ...globalSettings.calibration }
+    );
+    res.json(response.data);
+
+    // Emit to socket clients
+    io.emit('calibration_result', response.data);
+  } catch (error) {
+    console.error('Error calibrating camera:', error);
+    res.status(500).json({ error: error.message || 'Failed to calibrate camera' });
+  }
+});
+
+// Detect targets
+app.post('/api/detect', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${VISION_API_URL}/api/detect`,
+      { ...req.body, ...globalSettings.detection }
+    );
+    res.json(response.data);
+
+    // Emit to socket clients
+    io.emit('detection_result', response.data);
+  } catch (error) {
+    console.error('Error detecting targets:', error);
+    res.status(500).json({ error: error.message || 'Failed to detect targets' });
+  }
+});
+
+// Estimate pose using PnP
+app.post('/api/pnp', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${VISION_API_URL}/api/pnp`,
+      { ...req.body, ...globalSettings.pnp }
+    );
+    res.json(response.data);
+
+    // Emit to socket clients
+    io.emit('pnp_result', response.data);
+  } catch (error) {
+    console.error('Error estimating pose:', error);
+    res.status(500).json({ error: error.message || 'Failed to estimate pose' });
+  }
+});
+
+// Vision API health check
+app.get('/api/vision-health', async (req, res) => {
+  try {
+    const response = await axios.get(`${VISION_API_URL}/api/health`);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error checking vision API health:', error);
+    res.status(500).json({ error: error.message || 'Vision API unavailable' });
+  }
+});
+
+// Socket.io
 io.on('connection', (socket) => {
   console.log('Client connected');
   
-  // Send initial data
-  socket.emit('connection_status', { connected: true });
-  
-  // Simulate sending stream data
-  const streamDataInterval = setInterval(() => {
-    socket.emit('stream_data', generateRandomData());
-  }, 1000);
-  
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    clearInterval(streamDataInterval);
   });
 });
 
-// Start the server
-const PORT = process.env.REACT_APP_SERVER_PORT || 9029;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`React Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
+// This app is an API server, not serving React static files
+// The React app is served by the dev server on a different port
+
+// Start server
+const PORT = process.env.PORT || 9029;
+server.listen(PORT, () => {
+  console.log(`API Server running on port ${PORT}`);
 }); 
