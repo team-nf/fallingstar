@@ -1,311 +1,233 @@
-#!/usr/bin/env python3
-"""
-Web server for the vision processing UI.
-Provides camera feed streaming and configuration API.
-"""
-
 import os
+import sys
 import json
-import cv2
-import time
 import logging
+import argparse
+from flask import Flask, render_template, jsonify, request, send_from_directory, Response
+from flask_socketio import SocketIO, emit
 import threading
-import base64
-from typing import Dict, Any, Optional, List
-from flask import Flask, render_template, Response, jsonify, request, send_from_directory
-from flask_socketio import SocketIO
+import time
+import cv2
+import numpy as np
+from pathlib import Path
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("VisionUI")
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Initialize Flask application
-app = Flask(__name__, static_folder='static', template_folder='templates')
-app.config['SECRET_KEY'] = 'vision-processing-ui'
+# Create Flask app
+app = Flask(__name__, 
+            static_folder=os.path.join(os.path.dirname(__file__), 'build/static'),
+            template_folder=os.path.join(os.path.dirname(__file__), 'build'))
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Global variables
-config_path = os.environ.get('CONFIG_PATH', 'config/pc_config.json')
-frame_buffer = None
-latest_detections = []
-latest_tracked_objects = []
-selected_target = None
-ui_settings = {
-    'theme': 'dark',
-    'show_processing_steps': True,
-    'show_detection_boxes': True,
-    'show_tracking_info': True,
-    'show_selection_info': True,
-    'show_debug_info': False,
-    'stream_resolution': 'original'  # 'original', 'hd', 'sd'
+# Configuration
+config = {
+    'team_number': os.environ.get('TEAM_NUMBER', '9029'),
+    'port': int(os.environ.get('PORT', 9029)),
+    'config_path': os.environ.get('CONFIG_PATH', 'config/pc_config.json'),
+    'enable_ui': os.environ.get('ENABLE_UI', 'true').lower() == 'true'
 }
 
-# Lock for thread synchronization
+# Global variables for camera and processing
+camera = None
+frame_buffer = None
 frame_lock = threading.Lock()
-config_lock = threading.Lock()
+processing_active = False
 
-
-def load_config() -> Dict[str, Any]:
-    """Load configuration from JSON file."""
-    try:
-        with config_lock:
-            with open(config_path, 'r') as f:
-                return json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading configuration: {e}")
-        return {}
-
-
-def save_config(config: Dict[str, Any]) -> bool:
-    """Save configuration to JSON file."""
-    try:
-        with config_lock:
-            # Create backup of current config
-            if os.path.exists(config_path):
-                backup_path = f"{config_path}.bak"
-                with open(config_path, 'r') as f_in:
-                    with open(backup_path, 'w') as f_out:
-                        f_out.write(f_in.read())
-            
-            # Write new config
-            with open(config_path, 'w') as f:
-                json.dump(config, f, indent=4)
-        return True
-    except Exception as e:
-        logger.error(f"Error saving configuration: {e}")
-        return False
-
-
-def get_config_sections() -> List[str]:
-    """Get the main sections of the configuration."""
-    config = load_config()
-    return list(config.keys())
-
-
-def encode_frame_to_jpeg(frame):
-    """Encode OpenCV frame to JPEG for streaming."""
-    if frame is None:
-        return None
-    
-    # Scale frame based on UI settings
-    resolution = ui_settings.get('stream_resolution', 'original')
-    if resolution == 'hd':
-        frame = cv2.resize(frame, (1280, 720))
-    elif resolution == 'sd':
-        frame = cv2.resize(frame, (640, 480))
+class Camera:
+    def __init__(self):
+        self.cap = None
+        self.connected = False
         
-    _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    return jpeg.tobytes()
-
-
-def encode_frame_to_base64(frame):
-    """Encode OpenCV frame to base64 for Socket.IO streaming."""
-    if frame is None:
-        return None
-    
-    # Scale frame based on UI settings
-    resolution = ui_settings.get('stream_resolution', 'original')
-    if resolution == 'hd':
-        frame = cv2.resize(frame, (1280, 720))
-    elif resolution == 'sd':
-        frame = cv2.resize(frame, (640, 480))
-        
-    _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
-    return base64.b64encode(jpeg.tobytes()).decode('utf-8')
-
-
-def update_frame(frame, detections=None, tracked_objects=None, target=None):
-    """Update the current frame and processing results."""
-    global frame_buffer, latest_detections, latest_tracked_objects, selected_target
-    
-    with frame_lock:
-        frame_buffer = frame
-        if detections is not None:
-            latest_detections = detections
-        if tracked_objects is not None:
-            latest_tracked_objects = tracked_objects
-        if target is not None:
-            selected_target = target
-            
-        # Emit frame to connected clients using Socket.IO
+    def connect(self, device_id=0):
         try:
-            encoded_frame = encode_frame_to_base64(frame)
-            if encoded_frame:
-                socketio.emit('frame_update', {
-                    'frame': encoded_frame,
-                    'timestamp': time.time()
-                })
-        except Exception as e:
-            logger.error(f"Error emitting frame: {e}")
-
-
-# Flask routes
-@app.route('/')
-def index():
-    """Render the main UI page."""
-    return render_template('index.html', 
-                          ui_settings=ui_settings,
-                          config_sections=get_config_sections())
-
-
-@app.route('/video_feed')
-def video_feed():
-    """Video streaming endpoint for HTTP clients."""
-    def generate():
-        while True:
-            with frame_lock:
-                current_frame = frame_buffer
-                
-            if current_frame is not None:
-                encoded_frame = encode_frame_to_jpeg(current_frame)
-                if encoded_frame:
-                    yield (b'--frame\r\n'
-                          b'Content-Type: image/jpeg\r\n\r\n' + encoded_frame + b'\r\n')
+            self.cap = cv2.VideoCapture(device_id)
+            self.connected = self.cap.isOpened()
+            if self.connected:
+                logger.info(f"Connected to camera {device_id}")
             else:
-                # If no frame is available, send a blank frame
-                blank_frame = np.zeros((480, 640, 3), np.uint8)
-                blank_frame = cv2.putText(blank_frame, "No video feed available", (50, 240), 
-                                         cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                encoded_blank = encode_frame_to_jpeg(blank_frame)
-                yield (b'--frame\r\n'
-                      b'Content-Type: image/jpeg\r\n\r\n' + encoded_blank + b'\r\n')
-                
-            time.sleep(0.033)  # ~30 FPS
+                logger.error(f"Failed to connect to camera {device_id}")
+        except Exception as e:
+            logger.error(f"Error connecting to camera: {e}")
+            self.connected = False
     
-    return Response(generate(),
-                   mimetype='multipart/x-mixed-replace; boundary=frame')
-
-
-@app.route('/config', methods=['GET'])
-def get_configuration():
-    """API endpoint to get current configuration."""
-    config = load_config()
-    return jsonify(config)
-
-
-@app.route('/config/<section>', methods=['GET'])
-def get_config_section(section):
-    """API endpoint to get specific configuration section."""
-    config = load_config()
-    if section in config:
-        return jsonify(config[section])
-    return jsonify({"error": f"Section {section} not found"}), 404
-
-
-@app.route('/config/<section>', methods=['POST'])
-def update_config_section(section):
-    """API endpoint to update a specific configuration section."""
-    try:
-        config = load_config()
-        if section not in config:
-            return jsonify({"error": f"Section {section} not found"}), 404
-            
-        # Update the section
-        updated_section = request.json
-        config[section] = updated_section
+    def disconnect(self):
+        if self.cap:
+            self.cap.release()
+        self.connected = False
         
-        # Save the updated config
-        if save_config(config):
-            return jsonify({"success": True, "message": f"Updated {section} configuration"})
-        else:
-            return jsonify({"error": "Failed to save configuration"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/config/<section>/<key>', methods=['PUT'])
-def update_config_value(section, key):
-    """API endpoint to update a specific configuration value."""
-    try:
-        config = load_config()
-        if section not in config:
-            return jsonify({"error": f"Section {section} not found"}), 404
-            
-        # Update the specific key
-        value = request.json.get('value')
-        config[section][key] = value
+    def get_frame(self):
+        if not self.connected or not self.cap:
+            return None
         
-        # Save the updated config
-        if save_config(config):
-            return jsonify({"success": True, "message": f"Updated {section}.{key} to {value}"})
+        ret, frame = self.cap.read()
+        if not ret:
+            return None
+        
+        return frame
+
+def process_frames():
+    global camera, frame_buffer, processing_active
+    
+    fps_count = 0
+    fps = 0
+    fps_time = time.time()
+    
+    while processing_active:
+        if camera and camera.connected:
+            frame = camera.get_frame()
+            
+            if frame is not None:
+                # Process frame (add detection, etc.)
+                
+                # Calculate FPS
+                fps_count += 1
+                if time.time() - fps_time >= 1.0:
+                    fps = fps_count
+                    fps_count = 0
+                    fps_time = time.time()
+                    socketio.emit('stream_data', {'fps': fps})
+                
+                # Add FPS text to frame
+                cv2.putText(frame, f"FPS: {fps}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                # Update frame buffer
+                with frame_lock:
+                    _, encoded_frame = cv2.imencode('.jpg', frame)
+                    frame_buffer = encoded_frame.tobytes()
+        
+        time.sleep(0.01)  # Small sleep to avoid excessive CPU usage
+
+def generate_frames():
+    global frame_buffer
+    
+    while True:
+        if frame_buffer is not None:
+            with frame_lock:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_buffer + b'\r\n')
         else:
-            return jsonify({"error": "Failed to save configuration"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+            # If no frame, return a blank frame
+            blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            _, encoded_frame = cv2.imencode('.jpg', blank_frame)
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + encoded_frame.tobytes() + b'\r\n')
+        
+        time.sleep(0.033)  # ~30 FPS
 
+# API Routes
+@app.route('/api/stream')
+def stream():
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/ui_settings', methods=['GET'])
-def get_ui_settings():
-    """API endpoint to get UI settings."""
-    return jsonify(ui_settings)
-
-
-@app.route('/ui_settings', methods=['POST'])
-def update_ui_settings():
-    """API endpoint to update UI settings."""
-    global ui_settings
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    # Read config file
     try:
-        new_settings = request.json
-        ui_settings.update(new_settings)
-        return jsonify({"success": True, "settings": ui_settings})
+        with open(config['config_path'], 'r') as f:
+            config_data = json.load(f)
+        return jsonify(config_data)
     except Exception as e:
+        logger.error(f"Error reading config: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/config', methods=['POST'])
+def update_config():
+    try:
+        data = request.json
+        with open(config['config_path'], 'w') as f:
+            json.dump(data, f, indent=2)
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Error updating config: {e}")
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/state', methods=['GET'])
-def get_state():
-    """API endpoint to get current processing state."""
-    with frame_lock:
-        state = {
-            "has_video": frame_buffer is not None,
-            "detections_count": len(latest_detections),
-            "tracked_objects_count": len(latest_tracked_objects),
-            "has_selected_target": selected_target is not None
-        }
-    return jsonify(state)
+# React App Routing (for serving the React app)
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        # For development, show a simple template with information about the server
+        # when React development server is running separately
+        if os.environ.get('NODE_ENV') == 'development':
+            return render_template('index.html')
+        # In production, serve the React build
+        else:
+            logger.info("Serving React app from build directory")
+            return render_template('index.html')
 
-
-# Socket.IO events
+# Socket.IO Events
 @socketio.on('connect')
 def handle_connect():
-    """Handle client connection to Socket.IO."""
-    logger.info(f"Client connected: {request.sid}")
-
+    logger.info('Client connected')
+    socketio.emit('connection_status', {'connected': True})
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle client disconnection from Socket.IO."""
-    logger.info(f"Client disconnected: {request.sid}")
+    logger.info('Client disconnected')
 
+def initialize_camera():
+    global camera, processing_active
+    
+    # Initialize camera
+    camera = Camera()
+    camera.connect(0)  # Connect to default camera
+    
+    # Start processing thread
+    processing_active = True
+    processing_thread = threading.Thread(target=process_frames)
+    processing_thread.daemon = True
+    processing_thread.start()
 
-@socketio.on('get_frame')
-def handle_get_frame():
-    """Handle frame request from client."""
-    with frame_lock:
-        if frame_buffer is not None:
-            encoded_frame = encode_frame_to_base64(frame_buffer)
-            if encoded_frame:
-                return {'frame': encoded_frame, 'timestamp': time.time()}
-    return {'frame': None, 'timestamp': time.time()}
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Vision Processing Server')
+    parser.add_argument('--config', type=str, help='Path to config file', default='config/pc_config.json')
+    parser.add_argument('--port', type=int, help='Server port', default=9029)
+    parser.add_argument('--no-ui', action='store_true', help='Disable UI')
+    parser.add_argument('--react-port', type=int, help='React dev server port', default=3000)
+    return parser.parse_args()
 
-
-def run_server(host='0.0.0.0', port=5000, debug=False):
-    """Run the Flask server."""
-    socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
-
+def main():
+    global config
+    
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Update config with command line arguments
+    if args.config:
+        config['config_path'] = args.config
+    if args.port:
+        config['port'] = args.port
+    if args.no_ui:
+        config['enable_ui'] = False
+    
+    # Initialize camera and processing
+    initialize_camera()
+    
+    # Start the server
+    host = '0.0.0.0' if config['enable_ui'] else 'localhost'
+    port = config['port']
+    
+    logger.info(f"Starting server on {host}:{port}")
+    logger.info(f"Config path: {config['config_path']}")
+    
+    if os.environ.get('NODE_ENV') == 'development':
+        logger.info(f"Development mode: React app available at http://localhost:{args.react_port}")
+    
+    try:
+        socketio.run(app, host=host, port=port, allow_unsafe_werkzeug=True)
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    finally:
+        # Cleanup
+        global processing_active
+        processing_active = False
+        if camera:
+            camera.disconnect()
 
 if __name__ == '__main__':
-    # Import numpy here to avoid circular import
-    import numpy as np
-    
-    # Create a blank initial frame
-    blank_frame = np.zeros((480, 640, 3), np.uint8)
-    blank_frame = cv2.putText(blank_frame, "Vision UI Server Running", (50, 240), 
-                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    update_frame(blank_frame)
-    
-    # Run the server
-    run_server(debug=True) 
+    main() 
