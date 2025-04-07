@@ -1,46 +1,40 @@
-FROM pklinker/coral-python:1
+FROM python:3.9-slim
 
-# Install additional dependencies
+# Install system dependencies for OpenCV
 RUN apt-get update && apt-get install -y \
-    python3-pip \
-    python3-opencv \
-    python3-numpy \
-    libopencv-dev \
-    wget \
-    unzip \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libx11-xcb1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install additional Python libraries
-RUN pip3 install --no-cache-dir \
-    numpy \
-    pillow \
-    pycoral \
-    pytesseract \
-    scikit-learn \
-    matplotlib \
-    pynetworktables \
-    cscore \
-    opencv-contrib-python \
-    tqdm \
-    imgaug
-
-# Set up directories for the application
+# Set working directory
 WORKDIR /app
-RUN mkdir -p /app/calibration /app/training /app/models /app/data
 
-# Copy project files
-COPY vision_processing.py /app/
-COPY labels.txt /app/
-COPY README.md /app/
+# Copy requirements file
+COPY requirements.txt .
 
-# This will be the volume mount point for the USB device
-VOLUME /dev/bus/usb
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir ultralytics torch --index-url https://download.pytorch.org/whl/cpu
 
-# Make the scripts executable
-RUN chmod +x /app/vision_processing.py
+# Copy application code
+COPY app.py app_local.py ./
 
-# Set environment variables
-ENV PYTHONPATH=/app
+# Environment variable for Roboflow API key
+ENV ROBOFLOW_API_KEY=""
 
-# Set entry point to run the vision processing script
-CMD ["python3", "/app/vision_processing.py"] 
+# Create model directory
+RUN mkdir -p model
+
+# For GUI applications, we need to set the display
+ENV DISPLAY=:0
+
+# Run the application
+ENTRYPOINT ["python", "app_local.py"]
+
+# Default parameters that can be overridden at runtime
+CMD ["--camera", "0", "--confidence", "0.5", "--download"] 
