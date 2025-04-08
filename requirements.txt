@@ -1,6 +1,4 @@
-tensorflow==2.13.0
-opencv-python==4.8.1.78
-numpy>=1.20.0
-Pillow>=9.0.0
-pycocotools>=2.0.6
-matplotlib>=3.5.0 
+# Requirements for Coral TPU
+# Most dependencies are already installed in the base image
+# We only need minimal additional packages
+matplotlib>=3.0.0,<3.3.0 

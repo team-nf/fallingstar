@@ -1,47 +1,35 @@
-FROM tensorflow/tensorflow:2.13.0-gpu
+FROM debian:buster
 
-# Install system dependencies for OpenCV and TensorFlow
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libx11-xcb1 \
-    libhdf5-dev \
-    libhdf5-serial-dev \
-    wget \
-    curl \
-    gnupg \
-    python3-opencv \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update --allow-releaseinfo-change && \
+    apt-get install -y curl gnupg ca-certificates zlib1g-dev libjpeg-dev git apt-utils \
+    usbutils libusb-1.0-0 libusb-1.0-0-dev python3-dev python3-numpy python3-matplotlib
 
-# Set working directory
+# Add Coral repository and install Edge TPU runtime
+RUN echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
+# Install Python and Coral libraries
+RUN apt-get update --allow-releaseinfo-change && \
+    apt-get install -y python3 python3-pip
+RUN apt-get install -y libedgetpu1-legacy-std python3-edgetpu
+RUN apt-get install -y python3-pycoral python3-tflite-runtime
+
+# Install additional Python packages
+RUN pip3 install pillow
+
+# Set up working directory
 WORKDIR /app
 
-# Copy requirements file
+# Copy requirements and install additional Python dependencies
 COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install additional packages needed for training and Edge TPU
-RUN pip install --no-cache-dir tflite-runtime
-RUN pip install --no-cache-dir pycocotools matplotlib
-
-# Create directories
-RUN mkdir -p /app/models
-RUN mkdir -p /app/dataset
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY train_coral.py test_coral.py ./
+COPY . .
 
-# Set environment variables for GPU
-ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+# Make test script executable
+RUN chmod +x test_coral.py
 
-# For GUI applications, we need to set the display
-ENV DISPLAY=:0
-
-# Default command to run the training script
-ENTRYPOINT ["python"]
-CMD ["train_coral.py"] 
+# Command to run when container starts
+CMD ["python3", "test_coral.py"] 

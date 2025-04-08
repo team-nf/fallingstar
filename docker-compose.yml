@@ -1,34 +1,12 @@
-version: '3'
-
 services:
-  coral-trainer:
-    build: .
+  coral:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    privileged: true  # Required for USB device access
     volumes:
-      - ./:/app  # Mount current directory to /app
-      - /tmp/.X11-unix:/tmp/.X11-unix  # For GUI display
-    environment:
-      - DISPLAY=${DISPLAY}
-      - NVIDIA_VISIBLE_DEVICES=all  # Make all GPUs visible
-    devices:
-      - /dev/video0:/dev/video0  # Camera device for testing
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
-    network_mode: host  # Simplifies X11 forwarding
-    
-    # Example commands:
-    
-    # To train from scratch:
-    # command: python train_coral.py --dataset_dir /app/dataset --annotations_file /app/dataset/train/_annotations.coco.json --val_annotations_file /app/dataset/valid/_annotations.coco.json --test_annotations_file /app/dataset/test/_annotations.coco.json --gpu_mem 0.8
-    
-    # To resume training:
-    # command: python train_coral.py --dataset_dir /app/dataset --annotations_file /app/dataset/train/_annotations.coco.json --val_annotations_file /app/dataset/valid/_annotations.coco.json --test_annotations_file /app/dataset/test/_annotations.coco.json --resume --initial_epoch 10
-    
-    # To test on camera:
-    # command: python test_coral.py --use_camera
-    
-    # To test on an image:
-    # command: python test_coral.py --image_path /app/dataset/test_image.jpg 
+      - /dev/bus/usb:/dev/bus/usb  # Mount USB devices
+      - .:/app  # Mount current directory as working directory
+    # Keep the container running for development
+    stdin_open: true
+    tty: true 
