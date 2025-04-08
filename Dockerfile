@@ -1,4 +1,5 @@
-FROM python:3.9-slim
+# FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 
 # Install system dependencies for OpenCV
 RUN apt-get update && apt-get install -y \
@@ -19,13 +20,15 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir ultralytics torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install ultralytics
+RUN pip install --no-cache-dir ultralytics
 
 # Copy application code
 COPY app.py app_local.py ./
 
-# Environment variable for Roboflow API key
-ENV ROBOFLOW_API_KEY=""
+# Environment variable for Roboflow API key - hardcoded
+ENV ROBOFLOW_API_KEY="XmQnHuLA3FZgcP19fRD8"
 
 # Create model directory
 RUN mkdir -p model

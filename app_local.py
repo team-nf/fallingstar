@@ -13,41 +13,45 @@ parser.add_argument('--confidence', type=float, default=0.5, help='Detection con
 parser.add_argument('--download', action='store_true', help='Download the model first')
 args = parser.parse_args()
 
-MODEL_PATH = "model"
-
 # Download model if requested or if it doesn't exist
-if args.download or not os.path.exists(MODEL_PATH):
+if args.download or not os.path.exists("best.pt"):
     print("Downloading model...")
-    rf = Roboflow(api_key=os.environ.get("ROBOFLOW_API_KEY"))
+    # Hardcoded API key
+    ROBOFLOW_API_KEY = "XmQnHuLA3FZgcP19fRD8"
+    rf = Roboflow(api_key=ROBOFLOW_API_KEY)
     project = rf.workspace("frc-team-503-frog-force").project("frc-2025-algae-and-coral")
-    model = project.version(1).download("yolov8", model_path=MODEL_PATH)
-    print(f"Model downloaded to {MODEL_PATH}")
+    
+    # Download model directly in current directory
+    model = project.version(1).download("yolov8")
+    
+    print("Model downloaded to current directory")
 
-# Initialize the local ONNX or TFLite model using OpenCV DNN
+# Initialize the local model using OpenCV DNN
 print("Loading model...")
-if os.path.exists(os.path.join(MODEL_PATH, "model.onnx")):
+model_format = ""
+if os.path.exists("model.onnx"):
     # Use ONNX model
-    net = cv2.dnn.readNetFromONNX(os.path.join(MODEL_PATH, "model.onnx"))
+    net = cv2.dnn.readNetFromONNX("model.onnx")
     model_format = "onnx"
     print("Using ONNX model")
-elif os.path.exists(os.path.join(MODEL_PATH, "best.pt")):
+elif os.path.exists("best.pt"):
     # Use PyTorch model
     try:
         import torch
         from ultralytics import YOLO
-        yolo_model = YOLO(os.path.join(MODEL_PATH, "best.pt"))
+        yolo_model = YOLO("best.pt")
         model_format = "yolo"
         print("Using YOLOv8 model")
     except ImportError:
         print("Error: ultralytics not installed. Install with: pip install ultralytics")
         exit(1)
 else:
-    print("Error: No supported model found in", MODEL_PATH)
+    print("Error: No supported model found in current directory")
     exit(1)
 
 # Load class names
 classnames = []
-with open(os.path.join(MODEL_PATH, "classes.txt"), "r") as f:
+with open("classes.txt", "r") as f:
     classnames = [line.strip() for line in f.readlines()]
 print(f"Loaded {len(classnames)} classes: {classnames}")
 
@@ -67,7 +71,7 @@ box_annotator = sv.BoxAnnotator(
 print("Starting detection... Press 'q' to quit")
 
 # Enable OpenCV DNN CUDA backend if available
-if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+if model_format == "onnx" and cv2.cuda.getCudaEnabledDeviceCount() > 0:
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
     print("CUDA acceleration enabled")
@@ -75,6 +79,7 @@ if cv2.cuda.getCudaEnabledDeviceCount() > 0:
 # For FPS calculation
 prev_time = time.time()
 frame_count = 0
+fps = 0
 
 while True:
     # Capture frame-by-frame

@@ -2,13 +2,13 @@ version: '3'
 
 services:
   algae-coral-detector:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
-      - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY}
       - DISPLAY=${DISPLAY}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix  # For GUI display
-      - ./model:/app/model  # Persist downloaded model
     devices:
       - /dev/video0:/dev/video0  # Camera device
     network_mode: host  # Simplifies X11 forwarding

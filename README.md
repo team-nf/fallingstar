@@ -1,59 +1,66 @@
 # FRC 2025 - Algae and Coral Detector
 
-This Docker container uses the [FRC 2025 - Algae and Coral](https://universe.roboflow.com/frc-team-503-frog-force/frc-2025-algae-and-coral) Roboflow model to detect algae and coral using your camera.
+Bu Docker container, [FRC 2025 - Algae and Coral](https://universe.roboflow.com/frc-team-503-frog-force/frc-2025-algae-and-coral) Roboflow modelini kullanarak kameranızla yosun ve mercan tespiti yapar.
 
-## Prerequisites
+## Gereksinimler
 
-- Docker and Docker Compose installed
-- A webcam or camera device connected to your computer
-- Roboflow API key (get it from [Roboflow](https://app.roboflow.com/settings/api))
+- Docker ve Docker Compose kurulu olmalı
+- Bilgisayarınıza bağlı bir webcam veya kamera cihazı
+- API anahtarı artık otomatik olarak dahil edilmiştir, ek yapılandırma gerekmez
 
-## Setup
+## Kurulum
 
-1. Clone this repository
-2. Set your Roboflow API key as an environment variable:
+1. Bu repo'yu klonlayın
+2. Containeri çalıştırın:
 
 ```bash
-export ROBOFLOW_API_KEY="your-api-key-here"
+./run.sh
 ```
 
-3. Build and run the container:
+veya manuel olarak:
 
 ```bash
+# X sunucusu bağlantılarına izin verme
+xhost +local:docker
+# Docker Compose ile çalıştırma
 docker-compose up --build
 ```
 
-## Configuration
+## Yapılandırma
 
-You can modify the camera index or confidence threshold in the `docker-compose.yml` file:
+Kamera indeksini veya tespit eşiğini `docker-compose.yml` dosyasında değiştirebilirsiniz:
 
 ```yaml
 command: --camera 1 --confidence 0.6
 ```
 
-Where:
-- `--camera` is the index of your camera device (default: 0)
-- `--confidence` is the detection threshold (default: 0.5)
+Burada:
+- `--camera` kamera cihazının indeksidir (varsayılan: 0)
+- `--confidence` tespit eşiğidir (varsayılan: 0.5)
 
-## Using a Different Camera
+## Farklı Bir Kamera Kullanmak
 
-If your camera is not at `/dev/video0`, modify the `docker-compose.yml` file to specify the correct device:
+Kameranız `/dev/video0` konumunda değilse, doğru cihazı belirtmek için `docker-compose.yml` dosyasını değiştirin:
 
 ```yaml
 devices:
-  - /dev/video1:/dev/video0  # If your camera is at /dev/video1
+  - /dev/video1:/dev/video0  # Kameranız /dev/video1'deyse
 ```
 
-## X11 Display Configuration
+## X11 Ekran Yapılandırması
 
-To display the camera feed, you need to allow Docker to connect to your X server:
+Kamera görüntüsünü göstermek için Docker'ın X sunucunuza bağlanmasına izin vermeniz gerekir:
 
 ```bash
 xhost +local:docker
 ```
 
-## Troubleshooting
+## Sorun Giderme
 
-- If you can't see the camera feed, make sure you've allowed Docker to connect to your X server.
-- If the camera isn't detected, verify the camera device path and permissions.
-- For Docker Desktop users, additional configuration may be needed for device access. 
+- Kamera görüntüsünü göremiyorsanız, Docker'ın X sunucunuza bağlanmasına izin verdiğinizden emin olun.
+- Kamera algılanmıyorsa, kamera cihaz yolunu ve izinlerini doğrulayın.
+- Docker Desktop kullanıcıları için cihaz erişimi için ek yapılandırma gerekebilir.
+
+## Modeller Hakkında
+
+Bu uygulama, indirilen modeli kullanarak tamamen yerel olarak çalışır. Model ilk çalıştırmada indirilir ve sonraki çalıştırmalarda tekrar indirilmesine gerek kalmaz. Bu, uygulamanın hızını artırır ve internet bağlantısına ihtiyaç duymadan çalışmasını sağlar. 
