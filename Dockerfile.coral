@@ -19,13 +19,18 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements file
-COPY requirements.txt .
+# Install Edge TPU runtime dependencies
+RUN echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+RUN apt-get update && apt-get install -y \
+    libedgetpu1-std \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy requirements file and install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install additional packages needed for training and Edge TPU
+# Install additional packages needed for Edge TPU
 RUN pip install --no-cache-dir tflite-runtime
 RUN pip install --no-cache-dir pycocotools matplotlib
 
@@ -36,12 +41,12 @@ RUN mkdir -p /app/dataset
 # Copy application code
 COPY train_coral.py test_coral.py ./
 
-# Set environment variables for GPU
+# Set environment variables for GPU and TPU
 ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
 
 # For GUI applications, we need to set the display
 ENV DISPLAY=:0
 
 # Default command to run the training script
-ENTRYPOINT ["python"]
-CMD ["train_coral.py"] 
+CMD ["python", "train_coral.py"] 

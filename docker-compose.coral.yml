@@ -1,8 +1,10 @@
 version: '3'
 
 services:
-  coral-trainer:
-    build: .
+  coral-training:
+    build:
+      context: .
+      dockerfile: Dockerfile.coral
     volumes:
       - ./:/app  # Mount current directory to /app
       - /tmp/.X11-unix:/tmp/.X11-unix  # For GUI display
@@ -18,17 +20,9 @@ services:
             - driver: nvidia
               capabilities: [gpu]
     network_mode: host  # Simplifies X11 forwarding
-    
-    # Example commands:
-    
-    # To train from scratch:
-    # command: python train_coral.py --dataset_dir /app/dataset --annotations_file /app/dataset/train/_annotations.coco.json --val_annotations_file /app/dataset/valid/_annotations.coco.json --test_annotations_file /app/dataset/test/_annotations.coco.json --gpu_mem 0.8
-    
-    # To resume training:
-    # command: python train_coral.py --dataset_dir /app/dataset --annotations_file /app/dataset/train/_annotations.coco.json --val_annotations_file /app/dataset/valid/_annotations.coco.json --test_annotations_file /app/dataset/test/_annotations.coco.json --resume --initial_epoch 10
-    
+    # To train:
+    # command: python train_coral.py --dataset_dir /app/dataset --annotations_file /app/dataset/annotations.json
     # To test on camera:
     # command: python test_coral.py --use_camera
-    
     # To test on an image:
     # command: python test_coral.py --image_path /app/dataset/test_image.jpg 

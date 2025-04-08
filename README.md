@@ -1,66 +1,127 @@
-# FRC 2025 - Algae and Coral Detector
+# Google Coral TPU Training and Inference for COCO Dataset
 
-Bu Docker container, [FRC 2025 - Algae and Coral](https://universe.roboflow.com/frc-team-503-frog-force/frc-2025-algae-and-coral) Roboflow modelini kullanarak kameranızla yosun ve mercan tespiti yapar.
+This project provides scripts for training and deploying a TensorFlow Lite model with int8 quantization to run on Google Coral Edge TPU. It includes features for training on GPU and pause/resume functionality.
 
-## Gereksinimler
+## Setup
 
-- Docker ve Docker Compose kurulu olmalı
-- Bilgisayarınıza bağlı bir webcam veya kamera cihazı
-- API anahtarı artık otomatik olarak dahil edilmiştir, ek yapılandırma gerekmez
+1. Place your COCO format dataset in the `dataset` folder. The dataset should contain:
+   - Images in JPG/PNG format
+   - `annotations.json` file with COCO annotations
 
-## Kurulum
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-1. Bu repo'yu klonlayın
-2. Containeri çalıştırın:
+3. For Google Coral support, install the PyCoral library:
+   ```bash
+   pip install --extra-index-url https://google-coral.github.io/py-repo/ pycoral
+   ```
 
+## Training a Model
+
+The training script (`train_coral.py`) does the following:
+- Loads a COCO-format dataset
+- Creates a multi-label classification model based on MobileNetV2
+- Trains the model on your dataset
+- Converts the model to TensorFlow Lite with int8 quantization
+- Saves both float and quantized models
+
+### Basic Training
+
+Run the training script:
 ```bash
-./run.sh
+python train_coral.py --dataset_dir dataset --annotations_file dataset/annotations.json
 ```
 
-veya manuel olarak:
+### Pause and Resume Training
 
+The script now supports pausing and resuming training:
+
+1. Start training as normal
+2. If you need to stop, press Ctrl+C to interrupt (training state is saved every epoch)
+3. To resume, run:
+   ```bash
+   python train_coral.py --dataset_dir dataset --annotations_file dataset/annotations.json --resume --initial_epoch 10
+   ```
+   (where 10 is the epoch to resume from)
+
+### GPU Memory Management
+
+For training on a GPU with limited VRAM (like RTX 3070 8GB), use:
 ```bash
-# X sunucusu bağlantılarına izin verme
-xhost +local:docker
-# Docker Compose ile çalıştırma
-docker-compose up --build
+python train_coral.py --dataset_dir dataset --annotations_file dataset/annotations.json --gpu_mem 0.8
 ```
 
-## Yapılandırma
+This restricts TensorFlow to use only 80% of available GPU memory.
 
-Kamera indeksini veya tespit eşiğini `docker-compose.yml` dosyasında değiştirebilirsiniz:
+### Additional Options
 
-```yaml
-command: --camera 1 --confidence 0.6
+```
+--image_size      Input image size for model (default: 320)
+--batch_size      Batch size for training (default: 16)
+--epochs          Number of epochs to train (default: 50)
+--output_dir      Directory to save models (default: models)
+--lr              Initial learning rate (default: 0.001)
 ```
 
-Burada:
-- `--camera` kamera cihazının indeksidir (varsayılan: 0)
-- `--confidence` tespit eşiğidir (varsayılan: 0.5)
+## Testing the Model
 
-## Farklı Bir Kamera Kullanmak
+The test script (`test_coral.py`) can:
+- Run the model on a static image
+- Run the model on a live camera feed
+- Use Google Coral Edge TPU acceleration if available
 
-Kameranız `/dev/video0` konumunda değilse, doğru cihazı belirtmek için `docker-compose.yml` dosyasını değiştirin:
-
-```yaml
-devices:
-  - /dev/video1:/dev/video0  # Kameranız /dev/video1'deyse
-```
-
-## X11 Ekran Yapılandırması
-
-Kamera görüntüsünü göstermek için Docker'ın X sunucunuza bağlanmasına izin vermeniz gerekir:
-
+Test on a static image:
 ```bash
-xhost +local:docker
+python test_coral.py --image_path dataset/test_image.jpg
 ```
 
-## Sorun Giderme
+Test with live camera:
+```bash
+python test_coral.py --use_camera
+```
 
-- Kamera görüntüsünü göremiyorsanız, Docker'ın X sunucunuza bağlanmasına izin verdiğinizden emin olun.
-- Kamera algılanmıyorsa, kamera cihaz yolunu ve izinlerini doğrulayın.
-- Docker Desktop kullanıcıları için cihaz erişimi için ek yapılandırma gerekebilir.
+Additional options:
+```
+--model_path      Path to TFLite model (default: models/model_int8.tflite)
+--labels_path     Path to labels file (default: models/labels.txt)
+--camera          Camera index for live testing (default: 0)
+--image_size      Input image size (default: 320)
+--threshold       Detection threshold (default: 0.5)
+```
 
-## Modeller Hakkında
+## Using Docker
 
-Bu uygulama, indirilen modeli kullanarak tamamen yerel olarak çalışır. Model ilk çalıştırmada indirilir ve sonraki çalıştırmalarda tekrar indirilmesine gerek kalmaz. Bu, uygulamanın hızını artırır ve internet bağlantısına ihtiyaç duymadan çalışmasını sağlar. 
+For convenience, this project includes Docker support with GPU acceleration:
+
+Build and run the training container:
+```bash
+docker-compose -f docker-compose.coral.yml build
+docker-compose -f docker-compose.coral.yml up
+```
+
+To resume training using Docker:
+```bash
+docker-compose -f docker-compose.coral.yml run coral-training python train_coral.py --dataset_dir /app/dataset --annotations_file /app/dataset/annotations.json --resume --initial_epoch 10
+```
+
+## Google Coral Deployment
+
+To use the trained model on a Google Coral device:
+
+1. Copy the quantized model `models/model_int8.tflite` to your Coral device
+2. Copy the labels file `models/labels.txt` to your Coral device
+3. Install PyCoral on your Coral device
+4. Run the test script with the Edge TPU model:
+   ```bash
+   python test_coral.py --model_path models/model_int8.tflite --use_camera
+   ```
+
+## Performance Notes
+
+- The int8 quantized model can run on both CPU and Google Coral Edge TPU
+- Edge TPU acceleration typically provides 10x or greater speedup
+- The model is optimized for real-time inference on edge devices
+- GPU acceleration is used during training (making use of your RTX 3070)
+- Training creates checkpoints after each epoch for safety 
