@@ -7,7 +7,7 @@ MODEL_PATH="models/ll/GOOGLECORAL_coral_and_algae_monochrome.tflite"
 LABELS_PATH="models/ll/labels.txt"
 
 # Detection confidence threshold
-THRESHOLD=0.3
+THRESHOLD=0.6
 
 # Camera settings (adjust as needed)
 CAMERA_ID=0  # Usually 0 for built-in webcam, 1 for external
