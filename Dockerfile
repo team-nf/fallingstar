@@ -3,7 +3,8 @@ FROM debian:buster
 # Install system dependencies
 RUN apt-get update --allow-releaseinfo-change && \
     apt-get install -y curl gnupg ca-certificates zlib1g-dev libjpeg-dev git apt-utils \
-    usbutils libusb-1.0-0 libusb-1.0-0-dev python3-dev python3-numpy python3-matplotlib
+    usbutils libusb-1.0-0 libusb-1.0-0-dev python3-dev python3-numpy python3-matplotlib \
+    python3-opencv libopencv-dev cmake build-essential
 
 # Add Coral repository and install Edge TPU runtime
 RUN echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list
@@ -17,6 +18,7 @@ RUN apt-get install -y python3-pycoral python3-tflite-runtime
 
 # Install additional Python packages
 RUN pip3 install pillow
+# We're using system-provided OpenCV instead of pip version
 
 # Set up working directory
 WORKDIR /app
@@ -28,8 +30,10 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Make test script executable
-RUN chmod +x test_coral.py
+# Make test scripts executable
+RUN chmod +x test_coral_detection.py
+RUN chmod +x coral_camera_detection.py
+RUN chmod +x run_coral_camera.sh
 
 # Command to run when container starts
-CMD ["python3", "test_coral.py"] 
+CMD ["python3", "test_coral_detection.py", "--help"] 
