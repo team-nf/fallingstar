@@ -1,7 +1,10 @@
 # Requirements for Coral TPU
 # Most dependencies are already installed in the base image
 # We only need minimal additional packages
+
 matplotlib>=3.0.0,<3.3.0
 # Using system-provided opencv-python package
 numpy>=1.16.0,<1.19.0
-Pillow>=6.0.0,<8.0.0 
+Pillow>=6.0.0,<8.0.0
+scipy==1.4.1  # Using an older version compatible with numpy 1.16.0
+filterpy==1.4.5 

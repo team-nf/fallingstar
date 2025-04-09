@@ -17,6 +17,9 @@ from pycoral.adapters import common
 from pycoral.adapters import detect
 from pycoral.utils.dataset import read_label_file
 
+# Import tracking module
+from tracking import Sort, draw_tracks
+
 def load_labels(labels_file):
     """Loads labels from file"""
     with open(labels_file, 'r') as f:
@@ -35,7 +38,7 @@ def preprocess_frame(frame, input_size):
     
     return resized_image, rgb_frame
 
-def draw_detection_results(frame, detections, labels, input_size, fps=0, threshold=0.3):
+def draw_detection_results(frame, detections, labels, input_size, tracked_objects=None, fps=0, threshold=0.3):
     """Draw detection results on the camera frame"""
     height, width, _ = frame.shape
     
@@ -62,18 +65,53 @@ def draw_detection_results(frame, detections, labels, input_size, fps=0, thresho
         if xmin >= xmax or ymin >= ymax:
             continue
         
-        # Choose a color based on class ID for better distinction
+        # Find matching tracked object if tracking is enabled
+        track_id = None
+        if tracked_objects is not None:
+            # Look for matching tracked object by IoU
+            max_iou = 0
+            for trk in tracked_objects:
+                tx1, ty1, tx2, ty2, tid = trk
+                # Calculate IoU with current detection
+                xx1 = max(xmin, tx1)
+                yy1 = max(ymin, ty1)
+                xx2 = min(xmax, tx2)
+                yy2 = min(ymax, ty2)
+                w = max(0, xx2 - xx1)
+                h = max(0, yy2 - yy1)
+                intersection = w * h
+                det_area = (xmax - xmin) * (ymax - ymin)
+                trk_area = (tx2 - tx1) * (ty2 - ty1)
+                union = det_area + trk_area - intersection
+                iou = intersection / union if union > 0 else 0
+                if iou > max_iou and iou > 0.5:
+                    max_iou = iou
+                    track_id = int(tid)
+        
+        # Choose a color based on track_id if available, otherwise use class ID
         colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255)]
-        color = colors[det.id % len(colors)]
+        if track_id is not None:
+            color = (track_id * 50 % 255, track_id * 120 % 255, track_id * 220 % 255)
+        else:
+            color = colors[det.id % len(colors)]
         
         # Draw bounding box with OpenCV
         cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), color, 3)
+        
+        # Draw a circle at the center of the bounding box
+        center_x = int((xmin + xmax) / 2)
+        center_y = int((ymin + ymax) / 2)
+        cv2.circle(frame, (center_x, center_y), 5, color, -1)
         
         # Get class label
         class_id = det.id
         score = det.score
         
-        label_text = f"{labels.get(class_id, class_id)}: {score:.2f}"
+        # Prepare label text
+        if track_id is not None:
+            label_text = f"{labels.get(class_id, class_id)}: {score:.2f} (ID: {track_id})"
+        else:
+            label_text = f"{labels.get(class_id, class_id)}: {score:.2f}"
         
         # Draw text background
         text_size = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
@@ -102,6 +140,8 @@ def main():
                         help='Camera feed width (default: 640)')
     parser.add_argument('--height', type=int, default=480,
                         help='Camera feed height (default: 480)')
+    parser.add_argument('--trail_duration', type=float, default=3.0,
+                        help='Duration of object trail in seconds (default: 3.0)')
     
     args = parser.parse_args()
     
@@ -140,6 +180,10 @@ def main():
         print("Error: Could not open camera.")
         return
     
+    # Initialize the tracker
+    tracker = Sort(max_age=30, min_hits=3, iou_threshold=0.3)
+    color_map = {}  # To store colors for each track ID
+    
     # FPS calculation variables
     frame_count = 0
     fps = 0
@@ -168,6 +212,28 @@ def main():
             # Filter results by threshold
             detections = [det for det in detections if det.score >= args.threshold]
             
+            # Convert detections to format for tracking
+            if detections:
+                tracking_dets = np.array([
+                    [
+                        det.bbox[0] * frame.shape[1] / input_size[0],  # xmin scaled to frame
+                        det.bbox[1] * frame.shape[0] / input_size[1],  # ymin scaled to frame
+                        det.bbox[2] * frame.shape[1] / input_size[0],  # xmax scaled to frame
+                        det.bbox[3] * frame.shape[0] / input_size[1],  # ymax scaled to frame
+                        det.score                                       # detection score
+                    ] 
+                    for det in detections
+                ])
+                
+                # Update tracker with new detections
+                tracked_objects = tracker.update(tracking_dets)
+            else:
+                tracking_dets = np.empty((0, 5))
+                tracked_objects = tracker.update()
+            
+            # Draw tracking trails first (so they're under the bounding boxes)
+            frame, color_map = draw_tracks(frame, tracker, max_age=args.trail_duration, color_map=color_map)
+            
             # Update FPS
             frame_count += 1
             elapsed_time = time.time() - start_time
@@ -177,10 +243,12 @@ def main():
                 start_time = time.time()
             
             # Draw detection results on the frame
-            result_frame = draw_detection_results(frame, detections, labels, input_size, fps, args.threshold)
+            result_frame = draw_detection_results(frame, detections, labels, input_size, 
+                                                  tracked_objects if len(tracked_objects) > 0 else None, 
+                                                  fps, args.threshold)
             
             # Display the resulting frame
-            cv2.imshow('Coral TPU Object Detection', result_frame)
+            cv2.imshow('Coral TPU Object Detection with Tracking', result_frame)
             
             # Break the loop if 'q' is pressed
             if cv2.waitKey(1) & 0xFF == ord('q'):
