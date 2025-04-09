@@ -104,7 +104,7 @@ def create_object_from_detection(detection_class_id: int,
     Factory function to create the appropriate DetectedObject subclass
     
     Args:
-        detection_class_id: Class ID from the detector (0=coral, 1=algae)
+        detection_class_id: Class ID from the detector (0=algae, 1=coral)
         bbox: Bounding box coordinates (x1, y1, x2, y2)
         score: Detection confidence score
         track_id: Tracking ID if available
@@ -113,9 +113,9 @@ def create_object_from_detection(detection_class_id: int,
         An instance of the appropriate DetectedObject subclass
     """
     if detection_class_id == 0:
-        return Coral(bbox, score, track_id)
-    elif detection_class_id == 1:
         return Algae(bbox, score, track_id)
+    elif detection_class_id == 1:
+        return Coral(bbox, score, track_id)
     else:
         # Generic object for unknown class IDs
         return DetectedObject(bbox, score, track_id) 
