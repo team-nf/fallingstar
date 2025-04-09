@@ -80,13 +80,17 @@ class ObjectDetector:
         
         return resized_image, rgb_image
     
-    def detect(self, image: np.ndarray, threshold: float = 0.3) -> List[DetectedObject]:
+    def detect(self, image: np.ndarray, threshold: float = 0.3, 
+             algae_diameter_mm: float = None, 
+             calibration_factor: float = 1.0) -> List[DetectedObject]:
         """
         Perform object detection on an image
         
         Args:
             image: Input image in OpenCV format (BGR)
             threshold: Detection confidence threshold
+            algae_diameter_mm: Diameter of algae object in millimeters (optional)
+            calibration_factor: Factor to adjust PnP distance calculations
             
         Returns:
             List of DetectedObject instances
@@ -130,7 +134,9 @@ class ObjectDetector:
             
             # Create the appropriate object type
             detected_obj = create_object_from_detection(
-                det.id, scaled_bbox, det.score
+                det.id, scaled_bbox, det.score, 
+                algae_diameter_mm=algae_diameter_mm,
+                calibration_factor=calibration_factor
             )
             
             results.append(detected_obj)

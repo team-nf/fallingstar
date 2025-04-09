@@ -13,6 +13,7 @@ from src.camera import Camera
 from src.model import ObjectDetector
 from src.tracking import ObjectTracker
 from src.objects import DetectedObject, Coral, Algae
+from src.pnp import PnPEstimator  # Correct import for the PnP algorithm
 
 def parse_args():
     """Parse command line arguments"""
@@ -41,6 +42,12 @@ def parse_args():
     parser.add_argument('--trail_duration', type=float, 
                        default=3.0,
                        help='Duration of object trail in seconds (default: 3.0)')
+    parser.add_argument('--algae_diameter', type=float, 
+                       default=413.0,
+                       help='Diameter of algae object in millimeters (default: 413.0)')
+    parser.add_argument('--calibration_factor', type=float,
+                       default=0.833,
+                       help='PnP distance calibration factor (default: 0.833 for 100cm actual vs 120cm measured)')
     
     return parser.parse_args()
 
@@ -79,6 +86,8 @@ def main():
     
     print(f"Detection threshold: {args.threshold}")
     print(f"Trail duration: {args.trail_duration} seconds")
+    print(f"Algae diameter: {args.algae_diameter} mm")
+    print(f"Calibration factor: {args.calibration_factor} (100cm/120cm = 0.833)")
     print("Starting detection. Press 'q' to quit.")
     
     # Main loop
@@ -93,7 +102,9 @@ def main():
             # Perform detection
             detections = detector.detect(
                 image=frame,
-                threshold=args.threshold
+                threshold=args.threshold,
+                algae_diameter_mm=args.algae_diameter,  # Pass algae diameter to create algae objects
+                calibration_factor=args.calibration_factor  # Pass calibration factor to adjust distances
             )
             
             # Update tracker with detections
