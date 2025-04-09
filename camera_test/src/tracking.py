@@ -12,7 +12,7 @@ import cv2
 from filterpy.kalman import KalmanFilter
 from typing import List, Dict, Tuple, Optional, Any
 
-from objects import DetectedObject
+from src.objects import DetectedObject
 
 class KalmanBoxTracker:
     """
@@ -217,7 +217,7 @@ class ObjectTracker:
         """
         self.frame_count += 1
         
-        # Extract bounding boxes and scores
+        # Convert detections to array format
         if not detections:
             dets = np.empty((0, 5))
         else:
@@ -226,72 +226,83 @@ class ObjectTracker:
                 for obj in detections
             ])
         
-        # Get predicted locations from existing trackers
-        trks = np.zeros((len(self.trackers), 4))
-        to_del = []
+        # Make predictions for all existing trackers and remove invalid ones
+        valid_trackers = []
         
-        for t, trk in enumerate(self.trackers):
-            pos = trk.predict()
-            trks[t] = pos
-            if np.any(np.isnan(pos)):
-                to_del.append(t)
+        for trk in self.trackers:
+            # Update tracker state
+            try:
+                bbox = trk.predict()
+                if not np.any(np.isnan(bbox)):
+                    valid_trackers.append(trk)
+            except:
+                # Skip any tracker that causes an error
+                continue
         
-        # Filter out invalid trackers
-        trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
+        # Reset tracker list to only include valid trackers
+        self.trackers = valid_trackers
+        
+        # Create arrays of valid tracker boxes for association
+        if self.trackers:
+            # Create array of tracker boxes
+            trks = np.array([trk.bbox for trk in self.trackers])
+        else:
+            trks = np.empty((0, 4))
         
         # Match detections to trackers
-        matched, unmatched_dets, unmatched_trks = self._associate_detections_to_trackers(
-            dets[:, :4], trks, self.iou_threshold
-        )
+        if len(dets) == 0:
+            # No detections - just return original detections
+            return detections
         
-        # Update matched trackers with assigned detections
-        for m in matched:
-            self.trackers[m[1]].update(
-                tuple(dets[m[0], :4]),
-                score=dets[m[0], 4] if dets.shape[1] > 4 else None
-            )
+        if len(trks) == 0:
+            # No trackers - create new trackers for all detections
+            for i, det in enumerate(detections):
+                self.trackers.append(KalmanBoxTracker(det.bbox, det.score))
+            return detections
         
-        # Create and initialize new trackers for unmatched detections
-        for i in unmatched_dets:
-            trk = KalmanBoxTracker(
-                tuple(dets[i, :4]), 
-                score=dets[i, 4] if dets.shape[1] > 4 else None
-            )
-            self.trackers.append(trk)
+        # Calculate IoU matrix for association
+        iou_matrix = np.zeros((len(dets), len(trks)), dtype=np.float32)
+        for d, det in enumerate(dets):
+            for t, trk in enumerate(trks):
+                iou_matrix[d, t] = self._calculate_iou(det[:4], trk)
+        
+        # Use Hungarian algorithm for assignment
+        matched_indices = []
+        if min(iou_matrix.shape) > 0:
+            a, b = linear_sum_assignment(-iou_matrix)
+            for idx in range(len(a)):
+                if iou_matrix[a[idx], b[idx]] >= self.iou_threshold:
+                    matched_indices.append([a[idx], b[idx]])
+        
+        matched_indices = np.array(matched_indices)
+        
+        # Find unmatched detections and trackers
+        unmatched_detections = []
+        if len(matched_indices) == 0:
+            unmatched_detections = list(range(len(dets)))
+        else:
+            matched_det_indices = set(matched_indices[:, 0]) if matched_indices.size > 0 else set()
+            unmatched_detections = [d for d in range(len(dets)) if d not in matched_det_indices]
+        
+        # Update matched trackers with new detections
+        for match in matched_indices:
+            if match[0] < len(detections) and match[1] < len(self.trackers):
+                det = detections[match[0]]
+                self.trackers[match[1]].update(det.bbox, det.score)
+                det.track_id = self.trackers[match[1]].id
+        
+        # Create new trackers for unmatched detections
+        for i in unmatched_detections:
+            if i < len(detections):
+                new_tracker = KalmanBoxTracker(detections[i].bbox, detections[i].score)
+                self.trackers.append(new_tracker)
+                # Assign tracker ID to the detection
+                detections[i].track_id = new_tracker.id
         
         # Remove dead trackers
-        i = len(self.trackers)
-        for trk in reversed(self.trackers):
-            i -= 1
-            if trk.time_since_update > self.max_age:
-                self.trackers.pop(i)
+        self.trackers = [t for t in self.trackers if t.time_since_update <= self.max_age]
         
-        # Update detections with tracking IDs
-        tracked_detections = []
-        
-        for i, obj in enumerate(detections):
-            # Find matching tracker
-            track_id = None
-            bbox = obj.bbox
-            for m in matched:
-                if m[0] == i:  # This detection matched with a tracker
-                    track_id = self.trackers[m[1]].id
-                    break
-            
-            # If no match, check if a new tracker was created for this detection
-            if track_id is None:
-                for u in unmatched_dets:
-                    if u == i:  # This detection created a new tracker
-                        track_id = self.trackers[-len(unmatched_dets) + list(unmatched_dets).index(u)].id
-                        break
-            
-            # Create a new object with track ID
-            if track_id is not None:
-                obj.track_id = track_id
-            
-            tracked_detections.append(obj)
-        
-        return tracked_detections
+        return detections
     
     def draw_trails(self, frame: np.ndarray, max_age: float = 3.0) -> np.ndarray:
         """
@@ -359,6 +370,11 @@ class ObjectTracker:
         Returns:
             IoU value
         """
+        # Ensure inputs are in the right format
+        bb_test = np.array(bb_test, dtype=np.float32).flatten()[:4]
+        bb_gt = np.array(bb_gt, dtype=np.float32).flatten()[:4]
+        
+        # Calculate intersection
         xx1 = max(bb_test[0], bb_gt[0])
         yy1 = max(bb_test[1], bb_gt[1])
         xx2 = min(bb_test[2], bb_gt[2])
@@ -367,65 +383,17 @@ class ObjectTracker:
         w = max(0., xx2 - xx1)
         h = max(0., yy2 - yy1)
         
-        wh = w * h
+        intersection = w * h
         
-        o = wh / ((bb_test[2] - bb_test[0]) * (bb_test[3] - bb_test[1]) 
-                  + (bb_gt[2] - bb_gt[0]) * (bb_gt[3] - bb_gt[1]) - wh)
-                  
-        return o
-
-    def _associate_detections_to_trackers(self, 
-                                        detections: np.ndarray, 
-                                        trackers: np.ndarray, 
-                                        iou_threshold: float = 0.3) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Associate detections with trackers using IoU
+        # Calculate areas
+        area1 = (bb_test[2] - bb_test[0]) * (bb_test[3] - bb_test[1])
+        area2 = (bb_gt[2] - bb_gt[0]) * (bb_gt[3] - bb_gt[1])
         
-        Args:
-            detections: Array of detections
-            trackers: Array of trackers
-            iou_threshold: IoU threshold for matching
-            
-        Returns:
-            Tuple of (matches, unmatched_detections, unmatched_trackers)
-        """
-        if len(trackers) == 0:
-            return np.empty((0, 2), dtype=int), np.arange(len(detections)), np.empty((0, 4), dtype=int)
+        # Calculate union
+        union = area1 + area2 - intersection
         
-        # Calculate IoU matrix
-        iou_matrix = np.zeros((len(detections), len(trackers)), dtype=np.float32)
-        for d, det in enumerate(detections):
-            for t, trk in enumerate(trackers):
-                iou_matrix[d, t] = self._calculate_iou(det, trk)
+        # Calculate IoU
+        if union <= 0:
+            return 0.0
         
-        # Use Hungarian algorithm to find optimal assignment
-        row_ind, col_ind = linear_sum_assignment(-iou_matrix)
-        matched_indices = np.column_stack((row_ind, col_ind))
-        
-        # Find unmatched detections
-        unmatched_detections = []
-        for d, det in enumerate(detections):
-            if d not in matched_indices[:, 0]:
-                unmatched_detections.append(d)
-        
-        # Find unmatched trackers
-        unmatched_trackers = []
-        for t, trk in enumerate(trackers):
-            if t not in matched_indices[:, 1]:
-                unmatched_trackers.append(t)
-        
-        # Filter out matches with low IoU
-        matches = []
-        for m in matched_indices:
-            if iou_matrix[m[0], m[1]] < iou_threshold:
-                unmatched_detections.append(m[0])
-                unmatched_trackers.append(m[1])
-            else:
-                matches.append(m.reshape(1, 2))
-        
-        if len(matches) == 0:
-            matches = np.empty((0, 2), dtype=int)
-        else:
-            matches = np.concatenate(matches, axis=0)
-        
-        return matches, np.array(unmatched_detections), np.array(unmatched_trackers) 
+        return intersection / union 

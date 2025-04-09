@@ -31,8 +31,11 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Make test scripts executable
-RUN chmod +x coral_camera_detection.py
+# Make main script executable
+RUN chmod +x main.py
+
+# Add PYTHONPATH to ensure src is in the module search path
+ENV PYTHONPATH="/app:${PYTHONPATH}"
 
 # Command to run when container starts
-CMD ["python3", "coral_camera_detection.py", "--help"] 
+CMD ["python3", "main.py", "--help"] 
