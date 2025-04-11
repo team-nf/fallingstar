@@ -82,7 +82,10 @@ class ObjectDetector:
     
     def detect(self, image: np.ndarray, threshold: float = 0.3, 
              algae_diameter_mm: float = None, 
-             calibration_factor: float = 1.0) -> List[DetectedObject]:
+             calibration_factor: float = 1.0,
+             calibration_x: float = 1.0,
+             calibration_y: float = 1.0,
+             calibration_z: float = 1.0) -> List[DetectedObject]:
         """
         Perform object detection on an image
         
@@ -90,7 +93,10 @@ class ObjectDetector:
             image: Input image in OpenCV format (BGR)
             threshold: Detection confidence threshold
             algae_diameter_mm: Diameter of algae object in millimeters (optional)
-            calibration_factor: Factor to adjust PnP distance calculations
+            calibration_factor: Legacy overall calibration factor
+            calibration_x: Factor to adjust X-axis measurements
+            calibration_y: Factor to adjust Y-axis measurements
+            calibration_z: Factor to adjust Z-axis measurements (depth/distance)
             
         Returns:
             List of DetectedObject instances
@@ -136,7 +142,10 @@ class ObjectDetector:
             detected_obj = create_object_from_detection(
                 det.id, scaled_bbox, det.score, 
                 algae_diameter_mm=algae_diameter_mm,
-                calibration_factor=calibration_factor
+                calibration_factor=calibration_factor,
+                calibration_x=calibration_x,
+                calibration_y=calibration_y,
+                calibration_z=calibration_z
             )
             
             results.append(detected_obj)

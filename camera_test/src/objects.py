@@ -14,7 +14,10 @@ def create_object_from_detection(detection_class_id: int,
                                 score: float, 
                                 track_id: Optional[int] = None,
                                 algae_diameter_mm: float = Algae.DIAMETER_AVG,
-                                calibration_factor: float = 1.0) -> DetectedObject:
+                                calibration_factor: float = 1.0,
+                                calibration_x: float = 1.0,
+                                calibration_y: float = 1.0,
+                                calibration_z: float = 1.0) -> DetectedObject:
     """
     Factory function to create the appropriate DetectedObject subclass
     
@@ -24,13 +27,25 @@ def create_object_from_detection(detection_class_id: int,
         score: Detection confidence score
         track_id: Tracking ID if available
         algae_diameter_mm: Diameter of algae object in millimeters
-        calibration_factor: Factor to adjust PnP distance calculations
+        calibration_factor: Legacy overall calibration factor
+        calibration_x: Factor to adjust X-axis measurements
+        calibration_y: Factor to adjust Y-axis measurements
+        calibration_z: Factor to adjust Z-axis measurements (depth/distance)
         
     Returns:
         An instance of the appropriate DetectedObject subclass
     """
     if detection_class_id == 0:
-        return Algae(bbox, score, track_id, diameter_mm=algae_diameter_mm, calibration_factor=calibration_factor)
+        return Algae(
+            bbox, 
+            score, 
+            track_id, 
+            diameter_mm=algae_diameter_mm, 
+            calibration_factor=calibration_factor,
+            calibration_x=calibration_x,
+            calibration_y=calibration_y, 
+            calibration_z=calibration_z
+        )
     elif detection_class_id == 1:
         return Coral(bbox, score, track_id)
     else:

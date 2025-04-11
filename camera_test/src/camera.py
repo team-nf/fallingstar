@@ -76,8 +76,7 @@ class Camera:
         
         return frame
     
-    def draw_detections(self, frame: np.ndarray, 
-                       detections: List[DetectedObject]) -> np.ndarray:
+    def draw_detections(self, frame: np.ndarray, detections: List['DetectedObject']) -> np.ndarray:
         """
         Draw detection results on the frame
         
@@ -86,36 +85,83 @@ class Camera:
             detections: List of DetectedObject instances
             
         Returns:
-            Frame with detection visualizations
+            Frame with detection results drawn
         """
+        # Make a copy of the frame to avoid modifying the original
+        result_frame = frame.copy()
+        
+        # Draw each detection
         for obj in detections:
-            # Get bounding box coordinates
-            xmin, ymin, xmax, ymax = map(int, obj.bbox)
+            # Get bounding box
+            x1, y1, x2, y2 = obj.bbox
             
-            # Get color
+            # Convert to integers
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            
+            # Get color for this object
             color = obj.get_color()
             
             # Draw bounding box
-            cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), color, 3)
+            cv2.rectangle(result_frame, (x1, y1), (x2, y2), color, 2)
             
-            # Draw a circle at the center of the bounding box
-            center_x, center_y = map(int, obj.center)
-            cv2.circle(frame, (center_x, center_y), 5, color, -1)
+            # Get label text
+            label = obj.get_label_text()
             
-            # Draw text background
-            label_text = obj.get_label_text()
-            text_size = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
-            cv2.rectangle(frame, (xmin, ymin - 25), (xmin + text_size[0], ymin), color, -1)
+            # Draw text with semi-transparent background
+            text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
             
-            # Draw text
-            cv2.putText(frame, label_text, (xmin, ymin - 5), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            # Draw background rectangle for text
+            cv2.rectangle(
+                result_frame,
+                (x1, y1 - text_size[1] - 10),
+                (x1 + text_size[0] + 10, y1),
+                (0, 0, 0, 128),
+                -1
+            )
+            
+            # Draw label text
+            cv2.putText(
+                result_frame,
+                label,
+                (x1 + 5, y1 - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (255, 255, 255),
+                2
+            )
+            
+            # Draw 3D position information if available
+            if hasattr(obj, 'get_position_info') and obj.get_position_info() and obj.get_position_info()['success']:
+                position_mm = obj.get_position_info()['position_mm']
+                
+                # Convert to meters for display
+                pos_x, pos_y, pos_z = position_mm[0] / 1000.0, position_mm[1] / 1000.0, position_mm[2] / 1000.0
+                
+                # Format position text
+                pos_text = f"Pos: ({pos_x:.2f}, {pos_y:.2f}, {pos_z:.2f})m"
+                
+                # Draw background rectangle for position text
+                text_size, _ = cv2.getTextSize(pos_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+                cv2.rectangle(
+                    result_frame,
+                    (x1, y2),
+                    (x1 + text_size[0] + 10, y2 + text_size[1] + 10),
+                    (0, 0, 0, 128),
+                    -1
+                )
+                
+                # Draw position text
+                cv2.putText(
+                    result_frame,
+                    pos_text,
+                    (x1 + 5, y2 + text_size[1] + 5),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 255, 255),
+                    2
+                )
         
-        # Add FPS info
-        fps_text = f"FPS: {self.fps:.1f}"
-        cv2.putText(frame, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        
-        return frame
+        return result_frame
     
     def display(self, frame: np.ndarray, window_name: str = "Object Detection") -> None:
         """

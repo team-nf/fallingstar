@@ -17,18 +17,26 @@ class PnPEstimator:
     def __init__(self, 
                 camera_matrix: Optional[np.ndarray] = None,
                 dist_coeffs: Optional[np.ndarray] = None,
-                calibration_factor: float = 1.0):
+                calibration_factor: float = 1.0,
+                calibration_x: float = 1.0,
+                calibration_y: float = 1.0,
+                calibration_z: float = 1.0):
         """
         Initialize the PnP algorithm
         
         Args:
             camera_matrix: 3x3 camera intrinsic matrix. If None, will use default estimate
             dist_coeffs: Distortion coefficients. If None, will assume no distortion
-            calibration_factor: Factor to adjust distance calculations (e.g., 100/120 = 0.833 
-                               if actual distance is 100cm but measured as 120cm)
+            calibration_factor: Overall factor to adjust distance calculations (legacy parameter)
+            calibration_x: Factor to adjust X-axis measurements
+            calibration_y: Factor to adjust Y-axis measurements
+            calibration_z: Factor to adjust Z-axis measurements (depth/distance)
         """
-        # Calibration factor to adjust distance calculations
-        self.calibration_factor = calibration_factor
+        # Store calibration factors
+        self.calibration_factor = calibration_factor  # Legacy parameter
+        self.calibration_x = calibration_x
+        self.calibration_y = calibration_y
+        self.calibration_z = calibration_z
         
         # If camera matrix not provided, use a reasonable default estimate
         # Note: For production use, camera should be properly calibrated
@@ -110,19 +118,22 @@ class PnPEstimator:
         focal_length = self.camera_matrix[0, 0]  # Assuming fx = fy
         
         # Calculate distance using the known size formula: distance = (real_size * focal_length) / apparent_size
-        # Apply calibration factor to adjust the calculated distance
+        # Apply overall calibration factor (legacy parameter)
         uncalibrated_distance_mm = (object_size_mm * focal_length) / apparent_size_pixels
         distance_mm = uncalibrated_distance_mm * self.calibration_factor
+        
+        # Apply Z-axis specific calibration
+        distance_mm = distance_mm * self.calibration_z
         
         # Calculate the 3D coordinates
         # First convert pixel coordinates to normalized image coordinates
         norm_x = (center_x - self.camera_matrix[0, 2]) / self.camera_matrix[0, 0]
         norm_y = (center_y - self.camera_matrix[1, 2]) / self.camera_matrix[1, 1]
         
-        # Calculate 3D coordinates
-        x_mm = norm_x * distance_mm
-        y_mm = norm_y * distance_mm
-        z_mm = distance_mm
+        # Calculate 3D coordinates with axis-specific calibration
+        x_mm = norm_x * distance_mm * self.calibration_x
+        y_mm = norm_y * distance_mm * self.calibration_y
+        z_mm = distance_mm  # Z-axis calibration already applied above
         
         # Format the distance string
         if distance_mm < 1000:

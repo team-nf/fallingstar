@@ -14,6 +14,7 @@ from src.model import ObjectDetector
 from src.tracking import ObjectTracker
 from src.objects import DetectedObject, Coral, Algae
 from src.pnp import PnPEstimator  # Correct import for the PnP algorithm
+from src.contour import ContourDetector  # Import for contour detection
 
 def parse_args():
     """Parse command line arguments"""
@@ -47,7 +48,26 @@ def parse_args():
                        help='Diameter of algae object in millimeters (default: 413.0)')
     parser.add_argument('--calibration_factor', type=float,
                        default=0.833,
-                       help='PnP distance calibration factor (default: 0.833 for 100cm actual vs 120cm measured)')
+                       help='Legacy calibration factor (default: 0.833 for 100cm actual vs 120cm measured)')
+    parser.add_argument('--calibration_x', type=float,
+                       default=1.25,
+                       help='X-axis calibration factor (default: 1.25 to correct 40cm to 50cm)')
+    parser.add_argument('--calibration_y', type=float,
+                       default=1.25,
+                       help='Y-axis calibration factor (default: 1.25 to correct 40cm to 50cm)')
+    parser.add_argument('--calibration_z', type=float,
+                       default=1.0,
+                       help='Z-axis/depth calibration factor (default: 1.0, uses calibration_factor)')
+    parser.add_argument('--disable_contours', action='store_true',
+                       help='Disable contour detection for objects (enabled by default)')
+    parser.add_argument('--canny_low', type=int, 
+                       default=50,
+                       help='Lower threshold for Canny edge detector (default: 50)')
+    parser.add_argument('--canny_high', type=int,
+                       default=150,
+                       help='Upper threshold for Canny edge detector (default: 150)')
+    parser.add_argument('--use_adaptive_threshold', action='store_true',
+                       help='Use adaptive thresholding instead of Canny edge detection')
     
     return parser.parse_args()
 
@@ -84,10 +104,27 @@ def main():
         iou_threshold=0.3  # IoU threshold for matching
     )
     
+    # Initialize contour detector if enabled
+    contour_detector = None
+    if not args.disable_contours:
+        contour_detector = ContourDetector(
+            canny_low=args.canny_low,
+            canny_high=args.canny_high,
+            use_adaptive_threshold=args.use_adaptive_threshold
+        )
+        print("Contour detection enabled.")
+        if args.use_adaptive_threshold:
+            print("Using adaptive thresholding for contour detection.")
+        else:
+            print(f"Using Canny edge detection with thresholds: {args.canny_low}-{args.canny_high}.")
+    
     print(f"Detection threshold: {args.threshold}")
     print(f"Trail duration: {args.trail_duration} seconds")
     print(f"Algae diameter: {args.algae_diameter} mm")
-    print(f"Calibration factor: {args.calibration_factor} (100cm/120cm = 0.833)")
+    print(f"Calibration factor (Z): {args.calibration_factor} (100cm/120cm = 0.833)")
+    print(f"Calibration X-axis: {args.calibration_x}")
+    print(f"Calibration Y-axis: {args.calibration_y}")
+    print(f"Calibration Z-axis: {args.calibration_z}")
     print("Starting detection. Press 'q' to quit.")
     
     # Main loop
@@ -103,8 +140,11 @@ def main():
             detections = detector.detect(
                 image=frame,
                 threshold=args.threshold,
-                algae_diameter_mm=args.algae_diameter,  # Pass algae diameter to create algae objects
-                calibration_factor=args.calibration_factor  # Pass calibration factor to adjust distances
+                algae_diameter_mm=args.algae_diameter,
+                calibration_factor=args.calibration_factor,
+                calibration_x=args.calibration_x,
+                calibration_y=args.calibration_y,
+                calibration_z=args.calibration_z
             )
             
             # Update tracker with detections
@@ -116,6 +156,10 @@ def main():
             # Draw detection results
             frame = camera.draw_detections(frame, tracked_objects)
             
+            # Detect contours if enabled
+            if contour_detector and tracked_objects:
+                contour_detector.detect_contours(frame, tracked_objects)
+            
             # Display the result
             camera.display(frame, window_name='Coral and Algae Detection with Tracking')
             
@@ -125,9 +169,16 @@ def main():
     
     except KeyboardInterrupt:
         print("Interrupted by user.")
+    except Exception as e:
+        print(f"Error in main loop: {e}")
     finally:
         # Close camera and destroy windows
         camera.close()
+        
+        # Close contour detector if initialized
+        if contour_detector:
+            contour_detector.close()
+            
         print("Camera released and windows closed.")
 
 if __name__ == '__main__':

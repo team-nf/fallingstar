@@ -258,6 +258,9 @@ class ObjectTracker:
             # No trackers - create new trackers for all detections
             for i, det in enumerate(detections):
                 self.trackers.append(KalmanBoxTracker(det.bbox, det.score))
+                # For Algae objects, always update position to start tracking right away
+                if det.get_class_name() == "Algae" and hasattr(det, 'update_position'):
+                    det.update_position(det.bbox)
             return detections
         
         # Calculate IoU matrix for association
@@ -290,6 +293,10 @@ class ObjectTracker:
                 det = detections[match[0]]
                 self.trackers[match[1]].update(det.bbox, det.score)
                 det.track_id = self.trackers[match[1]].id
+                
+                # Update 3D position for Algae objects
+                if det.get_class_name() == "Algae" and hasattr(det, 'update_position'):
+                    det.update_position(det.bbox)
         
         # Create new trackers for unmatched detections
         for i in unmatched_detections:
@@ -298,6 +305,10 @@ class ObjectTracker:
                 self.trackers.append(new_tracker)
                 # Assign tracker ID to the detection
                 detections[i].track_id = new_tracker.id
+                
+                # For Algae objects, always update position to start tracking right away
+                if detections[i].get_class_name() == "Algae" and hasattr(detections[i], 'update_position'):
+                    detections[i].update_position(detections[i].bbox)
         
         # Remove dead trackers
         self.trackers = [t for t in self.trackers if t.time_since_update <= self.max_age]

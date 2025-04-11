@@ -4,6 +4,7 @@
 Algae detection class with 3D position estimation
 """
 
+import time
 from typing import Tuple, Optional, Dict
 from src.base_object import DetectedObject
 from src.pnp import PnPEstimator
@@ -20,7 +21,10 @@ class Algae(DetectedObject):
                  score: float, 
                  track_id: Optional[int] = None,
                  diameter_mm: float = DIAMETER_AVG,
-                 calibration_factor: float = 1.0):
+                 calibration_factor: float = 1.0,
+                 calibration_x: float = 1.0,
+                 calibration_y: float = 1.0,
+                 calibration_z: float = 1.0):
         """
         Initialize an Algae detection
         
@@ -29,19 +33,48 @@ class Algae(DetectedObject):
             score: Detection confidence score
             track_id: Tracking ID if available
             diameter_mm: Diameter of algae object in millimeters
-            calibration_factor: Factor to adjust PnP distance calculations
+            calibration_factor: Legacy overall calibration factor
+            calibration_x: Factor to adjust X-axis measurements
+            calibration_y: Factor to adjust Y-axis measurements
+            calibration_z: Factor to adjust Z-axis measurements (depth/distance)
         """
         super().__init__(bbox, score, track_id)
         
         # Initialize PnP estimator for 3D position estimation
         self.diameter_mm = diameter_mm
         self.calibration_factor = calibration_factor
-        self.pnp_estimator = PnPEstimator(calibration_factor=calibration_factor)
+        self.calibration_x = calibration_x
+        self.calibration_y = calibration_y
+        self.calibration_z = calibration_z
+        
+        self.pnp_estimator = PnPEstimator(
+            calibration_factor=calibration_factor,
+            calibration_x=calibration_x,
+            calibration_y=calibration_y,
+            calibration_z=calibration_z
+        )
+        
+        # Position data
+        self.position_info = None
         
         # Calculate position if bounding box is approximately square
-        self.position_info = None
         if self.pnp_estimator.is_approximately_square(bbox):
             self.position_info = self.pnp_estimator.estimate_position(bbox, self.diameter_mm)
+    
+    def update_position(self, bbox: Tuple[float, float, float, float]) -> None:
+        """
+        Update position with a new bounding box (for tracked objects)
+        
+        Args:
+            bbox: New bounding box coordinates
+        """
+        # Only update if the bounding box is approximately square
+        if self.pnp_estimator.is_approximately_square(bbox):
+            position_info = self.pnp_estimator.estimate_position(bbox, self.diameter_mm)
+            
+            # If position estimation was successful, update position info
+            if position_info and position_info['success']:
+                self.position_info = position_info
     
     def get_class_name(self) -> str:
         """Get the class name"""
@@ -64,7 +97,7 @@ class Algae(DetectedObject):
         # Add distance information if available
         distance_str = self.get_distance_str()
         if distance_str:
-            return f"{base_text} | Dist: {distance_str}"
+            base_text = f"{base_text} | Dist: {distance_str}"
         
         return base_text
     
@@ -74,4 +107,4 @@ class Algae(DetectedObject):
             # Generate a color based on track_id but biased toward green
             return (50, 200 + (self.track_id * 20) % 55, 50)
         else:
-            return (50, 255, 50)  # Green-ish color for algae 
+            return (50, 255, 50)  # Green-ish color for algae
